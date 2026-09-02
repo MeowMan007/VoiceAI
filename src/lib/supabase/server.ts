@@ -2,9 +2,22 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 
-const defaultUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://demo.supabase.co'
-const defaultAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'demo-anon-key'
-const defaultService = process.env.SUPABASE_SERVICE_ROLE_KEY || 'demo-service-key'
+function isValidUrl(url: string) {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
+const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const rawAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+const rawService = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+
+const defaultUrl = isValidUrl(rawUrl) ? rawUrl : 'https://demo.supabase.co'
+const defaultAnon = rawAnon && !rawAnon.startsWith('your_') ? rawAnon : 'demo-anon-key'
+const defaultService = rawService && !rawService.startsWith('your_') ? rawService : 'demo-service-key'
 
 export async function createClient() {
   const cookieStore = await cookies()

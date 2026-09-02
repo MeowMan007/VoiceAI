@@ -107,6 +107,38 @@ const SEED_WORKFLOWS: (Workflow & { business: Business })[] = [
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
+  },
+  {
+    id: 'wf-seed-5',
+    business_id: 'biz-seed-1',
+    name: 'Cake Order Intake (Hindi — हिंदी)',
+    trigger: 'missed_call',
+    greeting: 'नमस्ते! Sweet Delights Bakery में आपका स्वागत है। मुझे बताइए, क्या आप केक ऑर्डर करना चाहते हैं या कोई प्रश्न है?',
+    closing_message: 'धन्यवाद! हमारी टीम जल्द ही आपसे संपर्क करेगी।',
+    language: 'hi',
+    fields: [
+      { id: '1', label: 'केक का प्रकार (Cake Type)', key: 'cake_type', type: 'text', required: true, order: 1 },
+      { id: '2', label: 'फ्लेवर (Flavour)', key: 'flavour', type: 'text', required: true, order: 2 },
+      { id: '3', label: 'वजन (Weight)', key: 'weight', type: 'text', required: true, order: 3 },
+      { id: '4', label: 'डिलीवरी या पिकअप', key: 'delivery_type', type: 'select', required: true, options: ['डिलीवरी', 'पिकअप'], order: 4 }
+    ],
+    conditions: [
+      { id: '1', field: 'required_date', operator: 'less_than', value: '24', action: 'mark_urgent', action_label: '24 घंटे में डिलीवरी — अर्जेंट' }
+    ],
+    post_action: 'create_record',
+    calendar_enabled: false,
+    is_active: true,
+    created_at: new Date(Date.now() - 1000 * 3600 * 144).toISOString(),
+    updated_at: new Date().toISOString(),
+    business: {
+      id: 'biz-seed-1',
+      owner_id: 'demo',
+      name: 'Sweet Delights Bakery',
+      type: 'cake_shop',
+      language: 'hi',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
   }
 ]
 
@@ -215,6 +247,11 @@ export default function WorkflowsPage() {
                     <span className={cn('badge', wf.is_active ? 'badge-completed' : 'badge-closed')}>
                       {wf.is_active ? 'Active' : 'Paused'}
                     </span>
+                    {wf.language === 'hi' ? (
+                      <span className="badge badge-pending">Hindi (हिंदी)</span>
+                    ) : (
+                      <span className="badge badge-new">English</span>
+                    )}
                     {wf.calendar_enabled && (
                       <span className="badge badge-contacted" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                         <Calendar size={10} /> Google Calendar

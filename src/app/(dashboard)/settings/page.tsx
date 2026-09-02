@@ -36,8 +36,10 @@ function SettingsContent() {
   const [googleConnected, setGoogleConnected] = useState(false)
   const [copied, setCopied] = useState(false)
   const [settings, setSettings] = useState<BusinessSettings>(DEFAULT_SETTINGS)
+  const [webhookUrl, setWebhookUrl] = useState('http://localhost:3000/api/vapi/webhook')
 
   useEffect(() => {
+    setWebhookUrl(`${window.location.origin}/api/vapi/webhook`)
     try {
       const saved = localStorage.getItem('voiceai_business_settings')
       if (saved) {
@@ -60,9 +62,7 @@ function SettingsContent() {
     toast.success('Business settings updated successfully')
   }
 
-  const webhookUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/api/vapi/webhook`
-    : 'https://your-domain.com/api/vapi/webhook'
+
 
   const copyWebhook = () => {
     navigator.clipboard.writeText(webhookUrl)

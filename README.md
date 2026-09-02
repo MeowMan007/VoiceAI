@@ -27,11 +27,11 @@ Built with **Next.js App Router**, **TypeScript**, **Tailwind CSS**, **AI Autono
   - Dynamic Form Field configuration (Text, Number, Date, Time, Select, Boolean)
   - Conditional Rules & Urgency Detection (e.g. if emergency or within 24h -> flag as High Priority)
   - Post-Collection Actions (Create Record, Schedule Callback, Send Summary)
-- **AI Conversation Simulator**:
-  - Interactive multi-turn simulator with voice waveform animation
-  - Live field extraction visualization as customer provides details
-  - Tool execution activity logs
-  - One-click testing with pre-seeded industry workflows
+- **Voice Engine**:
+  - **Live Web Voice Calls via Vapi Web SDK** (`@vapi-ai/web` with Deepgram speech-to-text and PlayHT neural voice synthesis).
+  - Bilingual conversational engine (English & Hindi / हिंदी) with automatic language routing.
+  - Interactive multi-turn simulator with audio streaming waveforms.
+  - Real-time field extraction visualizer and tool execution activity logs.
 - **Google Calendar Agent Tool Calling**:
   - Assistant checks availability (`check_calendar_availability`)
   - Assistant books appointments (`create_calendar_event`)
@@ -56,11 +56,11 @@ Built with **Next.js App Router**, **TypeScript**, **Tailwind CSS**, **AI Autono
 
 | Business | Use Case | Extracted Data Fields | Action & Tools |
 | :--- | :--- | :--- | :--- |
-| **Cake Shop** | Cake Order Intake | Flavour, weight, required date, message, delivery/pickup, budget | Urgent flagging (<24h), Delivery slot |
-| **Clinic / Doctor** | Appointment Booking | Patient name, doctor/specialty, preferred date/time, reason | **Google Calendar** appointment scheduling |
-| **Logistics** | Delivery & Tracking | Request type, pickup, drop, tracking number, package info | **External Tracking API** tool call |
-| **Real Estate** | Lead Qualification | Buy/rent/sell, property type, budget, location, visit date | Site visit calendar booking |
-| **Repair Service** | Service Request | Service type, issue description, address, urgency level | Priority escalation for emergencies |
+| **Cake Shop (English & Hindi)** | Cake Order Intake | Flavour, weight, required date, message, delivery/pickup | Urgent flagging (<24h), Delivery slot |
+| **Clinic / Doctor (English & Hindi)** | Appointment Booking | Patient name, doctor/specialty, preferred date/time, reason | **Google Calendar** appointment scheduling |
+| **Logistics & Delivery** | Courier Tracking & Dispatch | Tracking number, pickup/drop location, package type | **Delivery API** status lookup tool |
+| **Real Estate** | Property Viewing & Buyer Lead | Budget, property type, location, timeline, visit slot | **Google Calendar** viewing scheduling |
+| **Home Repair & Service** | Emergency Dispatch | Service type, issue description, urgency, address | Urgency escalation & priority assignment |
 
 ---
 
