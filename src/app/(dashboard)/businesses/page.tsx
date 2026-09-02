@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Business, BUSINESS_TYPES } from '@/types'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
-import { Plus, Building2, Pencil, Trash2, Phone, Globe, ExternalLink } from 'lucide-react'
+import { Plus, Building2, Pencil, Trash2, Phone, Globe, ArrowRight } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 
 const SEED_BUSINESSES: Business[] = [
@@ -25,7 +25,7 @@ const SEED_BUSINESSES: Business[] = [
     name: 'Apex Family Clinic',
     type: 'clinic',
     phone: '+91 98111 22334',
-    description: 'Primary health care and appointment scheduling. Automated Google Calendar booking.',
+    description: 'Primary healthcare and patient consultations. Automated appointment booking via Google Calendar.',
     language: 'en',
     created_at: new Date(Date.now() - 1000 * 3600 * 72).toISOString(),
     updated_at: new Date().toISOString()
@@ -36,7 +36,7 @@ const SEED_BUSINESSES: Business[] = [
     name: 'SwiftGo Express Logistics',
     type: 'delivery',
     phone: '+91 99887 76655',
-    description: 'Intra-city package delivery, live dispatch status, and shipment routing assistance.',
+    description: 'Intra-city parcel delivery, live courier status, and package routing support.',
     language: 'en',
     created_at: new Date(Date.now() - 1000 * 3600 * 96).toISOString(),
     updated_at: new Date().toISOString()
@@ -44,11 +44,11 @@ const SEED_BUSINESSES: Business[] = [
   {
     id: 'biz-seed-4',
     owner_id: 'demo',
-    name: 'रॉयल बेकर्स (Royal Bakers)',
-    type: 'cake_shop',
+    name: 'Prestige Property Realty',
+    type: 'real_estate',
     phone: '+91 97654 32100',
-    description: 'प्रीमियम केक, पेस्ट्री और पार्टी ऑर्डर्स के लिए हिंदी वॉयस असिस्टेंट।',
-    language: 'hi',
+    description: 'Residential and commercial real estate advisory, property viewings, and buyer qualification.',
+    language: 'en',
     created_at: new Date(Date.now() - 1000 * 3600 * 120).toISOString(),
     updated_at: new Date().toISOString()
   }
@@ -56,7 +56,6 @@ const SEED_BUSINESSES: Business[] = [
 
 export default function BusinessesPage() {
   const [businesses, setBusinesses] = useState<Business[]>(SEED_BUSINESSES)
-  const [loading, setLoading] = useState(true)
   const supabase = createClient()
 
   const fetchBusinesses = async () => {
@@ -74,8 +73,6 @@ export default function BusinessesPage() {
       }
     } catch {
       setBusinesses(SEED_BUSINESSES)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -88,91 +85,92 @@ export default function BusinessesPage() {
     try {
       await supabase.from('businesses').delete().eq('id', id)
       setBusinesses(prev => prev.filter(b => b.id !== id))
-      toast.success('Business deleted')
+      toast.success('Business profile deleted')
     } catch {
       setBusinesses(prev => prev.filter(b => b.id !== id))
-      toast.success('Business removed')
+      toast.success('Business profile removed')
     }
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-5">
+    <div className="p-8 lg:p-10 max-w-7xl w-full mx-auto space-y-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-zinc-800">
         <div>
-          <h1 className="text-xl lg:text-2xl font-bold tracking-tight text-white">Business Profiles</h1>
-          <p className="text-xs lg:text-sm text-zinc-400 mt-1">
-            Configure your small business entities and customize their voice assistant behavior.
+          <h1 className="text-2xl font-bold tracking-tight text-white font-display">Business Profiles</h1>
+          <p className="text-sm text-zinc-400 mt-1.5">
+            Manage your small business configurations and customize voice assistant handling.
           </p>
         </div>
         <Link
           href="/businesses/new"
           id="add-business-btn"
-          className="btn-primary text-xs py-2 px-3.5"
+          className="btn-primary text-xs py-2.5 px-4 shadow-sm"
         >
-          <Plus size={14} /> Add New Business
+          <Plus size={14} /> Add Business Profile
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {businesses.map(biz => {
           const typeInfo = BUSINESS_TYPES[biz.type] || BUSINESS_TYPES.other
           return (
             <div
               key={biz.id}
-              className="glass-card p-5 flex flex-col justify-between hover:border-zinc-700 transition-colors"
+              className="glass-card p-6 flex flex-col justify-between hover:border-zinc-700 transition-colors"
             >
               <div>
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-2xl">{typeInfo.icon}</span>
-                    <div>
-                      <h3 className="font-semibold text-sm text-white tracking-tight">{biz.name}</h3>
-                      <p className="text-[11px] text-emerald-400 font-medium">{typeInfo.label}</p>
-                    </div>
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div>
+                    <span className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider block mb-1">
+                      {typeInfo.label}
+                    </span>
+                    <h3 className="font-bold text-base text-white tracking-tight">{biz.name}</h3>
                   </div>
-                  <div className="flex items-center gap-1">
+
+                  <div className="flex items-center gap-1.5">
                     <Link
                       href={`/businesses/${biz.id}`}
                       id={`edit-biz-${biz.id}`}
-                      className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
                       title="Edit Profile"
                     >
-                      <Pencil size={13} />
+                      <Pencil size={14} />
                     </Link>
                     <button
                       onClick={() => handleDelete(biz.id, biz.name)}
                       id={`delete-biz-${biz.id}`}
-                      className="p-1.5 rounded-md text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
                       title="Delete Profile"
                     >
-                      <Trash2 size={13} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>
 
-                <p className="text-xs text-zinc-400 leading-relaxed line-clamp-2 mb-4">
+                <p className="text-xs text-zinc-400 leading-relaxed mb-6">
                   {biz.description || 'No description provided.'}
                 </p>
               </div>
 
-              <div className="pt-3 border-t border-zinc-800/80 space-y-1.5 text-[11px] text-zinc-400">
+              <div className="pt-4 border-t border-zinc-800/80 space-y-2 text-xs text-zinc-400">
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <Phone size={11} className="text-zinc-500" />
-                    {biz.phone || 'Direct missed-call line'}
+                  <span className="flex items-center gap-2">
+                    <Phone size={13} className="text-zinc-500" />
+                    <span className="text-zinc-300 font-mono text-[11px]">{biz.phone || 'Direct line'}</span>
                   </span>
-                  <span className="flex items-center gap-1 font-mono text-white">
-                    <Globe size={11} className="text-emerald-400" />
-                    {biz.language === 'hi' ? 'Hindi' : 'English'}
+                  <span className="text-zinc-400 text-[11px]">
+                    English
                   </span>
                 </div>
                 <div className="flex items-center justify-between pt-1">
-                  <span className="text-zinc-500">Created: {formatDate(biz.created_at)}</span>
+                  <span className="text-zinc-500 text-[11px]">Created {formatDate(biz.created_at)}</span>
                   <Link
                     href={`/workflows/new?business_id=${biz.id}`}
-                    className="text-emerald-400 hover:underline inline-flex items-center gap-0.5 font-medium"
+                    className="text-emerald-400 hover:text-emerald-300 font-semibold text-xs inline-flex items-center gap-1"
                   >
-                    Add Workflow &rarr;
+                    Configure Workflow <ArrowRight size={13} />
                   </Link>
                 </div>
               </div>
@@ -183,16 +181,16 @@ export default function BusinessesPage() {
         {/* Add Business Tile */}
         <Link
           href="/businesses/new"
-          className="glass-card p-6 flex flex-col items-center justify-center text-center border-dashed hover:border-emerald-500/50 hover:bg-zinc-950 transition-all min-h-[190px] group"
+          className="glass-card p-8 flex flex-col items-center justify-center text-center border-dashed hover:border-emerald-500/50 hover:bg-zinc-950 transition-all min-h-[220px] group"
         >
-          <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-emerald-400 group-hover:border-emerald-500/40 mb-2 transition-colors">
-            <Plus size={18} />
+          <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-emerald-400 group-hover:border-emerald-500/40 mb-3 transition-colors">
+            <Plus size={20} />
           </div>
-          <p className="text-xs font-semibold text-white group-hover:text-emerald-400 transition-colors">
-            Create Another Business Profile
+          <p className="text-sm font-semibold text-white group-hover:text-emerald-400 transition-colors">
+            Create Business Profile
           </p>
-          <p className="text-[11px] text-zinc-500 mt-1 max-w-[200px]">
-            Support clinics, repair shops, bakeries, or delivery hubs.
+          <p className="text-xs text-zinc-500 mt-1 max-w-[220px] leading-relaxed">
+            Bakeries, Clinics, Logistics, Real Estate, or Repair Services.
           </p>
         </Link>
       </div>

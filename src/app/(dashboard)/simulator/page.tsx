@@ -6,7 +6,8 @@ import { useSearchParams } from 'next/navigation'
 import toast from 'react-hot-toast'
 import {
   Send, Mic, MicOff, RefreshCw, Save, Phone, PhoneOff,
-  Globe, Sparkles, Calendar, Volume2, CheckCircle2, Box
+  Globe, Sparkles, Calendar, Volume2, CheckCircle2, Box,
+  User, Bot
 } from 'lucide-react'
 import { v4 as uuidv4 } from 'uuid'
 import { cn } from '@/lib/utils'
@@ -95,15 +96,15 @@ const DEMO_WORKFLOWS: Workflow[] = [
     }
   },
   {
-    id: 'demo-cake-hindi',
+    id: 'demo-realty',
     business_id: 'demo-biz-4',
-    name: 'केक ऑर्डर (Hindi Assistant)',
+    name: 'Property Lead & Tour Booking',
     trigger: 'missed_call',
-    greeting: 'नमस्ते! रॉयल बेकरी में कॉल करने के लिए धन्यवाद। हम आपकी कॉल नहीं उठा पाए। क्या आप केक ऑर्डर करना चाहते हैं या कोई सामान्य जानकारी चाहिए?',
-    closing_message: 'धन्यवाद! हमने आपकी जानकारी दर्ज कर ली है। हमारी टीम जल्द ही आपसे संपर्क करेगी।',
-    language: 'hi',
-    fields: WORKFLOW_TEMPLATES.cake_shop.fields!,
-    conditions: WORKFLOW_TEMPLATES.cake_shop.conditions!,
+    greeting: "Hello, thank you for calling Prestige Property Realty. Sorry we missed your call. I am your AI assistant. Are you looking to buy, rent, or schedule a viewing?",
+    closing_message: "Thank you, I have recorded your preferences and our property consultant will reach out shortly.",
+    language: 'en',
+    fields: WORKFLOW_TEMPLATES.real_estate.fields!,
+    conditions: WORKFLOW_TEMPLATES.real_estate.conditions!,
     post_action: 'create_record',
     calendar_enabled: true,
     is_active: true,
@@ -112,11 +113,11 @@ const DEMO_WORKFLOWS: Workflow[] = [
     business: {
       id: 'demo-biz-4',
       owner_id: 'demo',
-      name: 'रॉयल बेकर्स (Royal Bakers)',
-      type: 'cake_shop',
+      name: 'Prestige Property Realty',
+      type: 'real_estate',
       phone: '+91 98111 22334',
-      description: 'प्रीमियम केक और पेस्ट्री',
-      language: 'hi',
+      description: 'Luxury residential and commercial properties',
+      language: 'en',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
@@ -395,15 +396,15 @@ function SimulatorContent() {
           {/* Quick Trigger Test Prompts */}
           <div className="glass-card p-4">
             <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-emerald-400">
-              ⚡ Quick Test Scenarios
+              Quick Test Scenarios
             </label>
             <div className="space-y-1.5 text-xs">
               {[
-                { label: '🎂 Order a Cake (Cake Shop)', text: 'I want to order a 1kg chocolate truffle cake for tomorrow' },
-                { label: '📅 Book Clinic Callback (Calendar Tool)', text: 'I want to schedule an appointment tomorrow at 4 PM' },
-                { label: '🚚 Track Delivery (External API Tool)', text: 'Can you check status of my delivery with tracking number ORD-101?' },
-                { label: '🇮🇳 Hindi Order Enquiry (Bilingual)', text: 'नमस्ते, मुझे कल के लिए बर्थडे केक का आर्डर देना है' },
-                { label: '🚨 Urgent Repair (Condition Trigger)', text: 'Emergency! Pipe burst in bathroom, need repair immediately!' },
+                { label: 'Order a Custom Cake (Bakery)', text: 'I want to order a 1kg chocolate truffle cake for tomorrow' },
+                { label: 'Book Clinic Callback (Calendar Tool)', text: 'I want to schedule an appointment tomorrow at 4 PM' },
+                { label: 'Track Delivery (External API Tool)', text: 'Can you check status of my delivery with tracking number ORD-101?' },
+                { label: 'Schedule Property Viewing (Real Estate)', text: 'I would like to book a property tour this Saturday at 11 AM' },
+                { label: 'Urgent Repair Request (Emergency Rule)', text: 'Emergency! Pipe burst in bathroom, need repair technician immediately!' },
               ].map(scenario => (
                 <button
                   key={scenario.label}
@@ -564,7 +565,7 @@ function SimulatorContent() {
                             : 'bg-zinc-800 text-white'
                         )}
                       >
-                        {msg.role === 'user' ? '👤' : '🤖'}
+                        {msg.role === 'user' ? <User size={13} /> : <Bot size={13} />}
                       </div>
                       <div
                         className={cn(
@@ -604,11 +605,7 @@ function SimulatorContent() {
                     ref={inputRef}
                     type="text"
                     className="input-field flex-1 text-xs py-2"
-                    placeholder={
-                      selectedWorkflow?.language === 'hi'
-                        ? 'यहाँ उत्तर टाइप करें (e.g. मुझे कल 4 बजे का समय चाहिए)...'
-                        : 'Type your reply (e.g. Schedule a callback tomorrow at 4 PM)...'
-                    }
+                    placeholder="Type your reply (e.g. Schedule a callback tomorrow at 4 PM)..."
                     value={input}
                     onChange={e => setInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && !loading && sendMessage()}
@@ -625,8 +622,8 @@ function SimulatorContent() {
                   </button>
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-2 px-1">
-                  <span>💡 Try: &quot;Schedule appointment tomorrow at 4 PM&quot; or &quot;Track order ORD-101&quot;</span>
-                  <span className="font-mono text-zinc-400">{selectedWorkflow?.language === 'hi' ? '🇮🇳 Hindi Mode' : '🇬🇧 English Mode'}</span>
+                  <span>Try: &quot;Schedule appointment tomorrow at 4 PM&quot; or &quot;Track order ORD-101&quot;</span>
+                  <span className="font-mono text-zinc-400">Autonomous Tool Calling Active</span>
                 </div>
               </div>
             )}

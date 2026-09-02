@@ -4,10 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Call, Business, BUSINESS_TYPES, CallStatus } from '@/types'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
-import {
-  PhoneCall, Search, Download, Calendar,
-  ChevronRight, CheckCircle2, AlertTriangle, Clock
-} from 'lucide-react'
+import { PhoneCall, Search, Download, ChevronRight } from 'lucide-react'
 import { formatDate, formatRelativeTime, cn } from '@/lib/utils'
 
 const SEED_CALLS: Call[] = [
@@ -18,12 +15,12 @@ const SEED_CALLS: Call[] = [
     caller_name: 'Rahul Sharma',
     caller_phone: '+91 98765 43210',
     status: 'in_progress',
-    intent: 'Order a Cake (Chocolate Truffle)',
+    intent: 'Order Custom Chocolate Truffle Cake',
     summary: 'Customer called to order a 1kg chocolate truffle cake for a birthday tomorrow. Delivery requested by 4:00 PM.',
     urgency: 'urgent',
     follow_up_status: 'pending',
     transcript: [
-      { role: 'assistant', content: "Hi! Thanks for calling Sweet Delights Bakery. Sorry we missed your call. I'm your AI assistant. Are you calling to place an order or general enquiry?", timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString() },
+      { role: 'assistant', content: "Hello, thanks for calling Sweet Delights Bakery. Sorry we missed your call. How can I assist you with your order today?", timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString() },
       { role: 'user', content: "Hi, I need to order a 1kg chocolate truffle cake urgently for tomorrow afternoon.", timestamp: new Date(Date.now() - 1000 * 60 * 14).toISOString() }
     ],
     collected_data: { flavour: 'Chocolate Truffle', weight: '1kg', required_date: 'Tomorrow' },
@@ -47,15 +44,15 @@ const SEED_CALLS: Call[] = [
     caller_name: 'Anita Verma',
     caller_phone: '+91 98111 22334',
     status: 'completed',
-    intent: 'Doctor Appointment Booking',
-    summary: 'Patient requested appointment callback for tomorrow at 4:00 PM. Verified slot and created Google Calendar event.',
+    intent: 'Doctor Appointment Consultation',
+    summary: 'Patient requested appointment callback for tomorrow at 4:00 PM. Verified calendar slot and scheduled follow-up.',
     urgency: 'normal',
     follow_up_status: 'resolved',
     calendar_event_id: 'cal_event_98231',
     calendar_event_url: 'https://calendar.google.com',
     transcript: [
-      { role: 'assistant', content: "Hello! You've reached Apex Family Clinic. Would you like to book an appointment or check timings?", timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString() },
-      { role: 'user', content: "I'd like to book an appointment with Dr. Sharma tomorrow around 4 PM please.", timestamp: new Date(Date.now() - 1000 * 60 * 44).toISOString() }
+      { role: 'assistant', content: "Hello, you have reached Apex Family Clinic. Would you like to book an appointment or check timings?", timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString() },
+      { role: 'user', content: "I would like to book an appointment with Dr. Sharma tomorrow around 4 PM please.", timestamp: new Date(Date.now() - 1000 * 60 * 44).toISOString() }
     ],
     collected_data: { patient_name: 'Anita Verma', doctor_preference: 'Dr. Sharma', preferred_time: '16:00' },
     language_used: 'en',
@@ -83,7 +80,7 @@ const SEED_CALLS: Call[] = [
     urgency: 'normal',
     follow_up_status: 'contacted',
     transcript: [
-      { role: 'assistant', content: "Hi! SwiftGo Express Logistics assistant here. Do you need a new delivery or status check?", timestamp: new Date(Date.now() - 1000 * 3600 * 2).toISOString() },
+      { role: 'assistant', content: "Hello, SwiftGo Express Logistics assistant here. Do you need a new dispatch or status check?", timestamp: new Date(Date.now() - 1000 * 3600 * 2).toISOString() },
       { role: 'user', content: "Can you check where my package ORD-101 is right now?", timestamp: new Date(Date.now() - 1000 * 3600 * 2 + 10000).toISOString() }
     ],
     collected_data: { order_id: 'ORD-101', status: 'Out for Delivery' },
@@ -104,27 +101,27 @@ const SEED_CALLS: Call[] = [
     id: 'call-seed-4',
     business_id: 'biz-4',
     workflow_id: 'wf-4',
-    caller_name: 'दिनेश कुमार (Dinesh Kumar)',
+    caller_name: 'Dinesh Kumar',
     caller_phone: '+91 97654 32100',
     status: 'new',
-    intent: 'बर्थडे केक पूछताछ (Hindi Enquiry)',
-    summary: 'ग्राहक ने कल शाम के लिए 2 किलो वेनिला केक के लिए पूछताछ की। विवरण दर्ज किया गया।',
+    intent: 'Birthday Party Catering Enquiry',
+    summary: 'Customer called to enquire about custom 2kg vanilla cake and catering options for tomorrow evening.',
     urgency: 'normal',
     follow_up_status: 'pending',
     transcript: [
-      { role: 'assistant', content: "नमस्ते! रॉयल बेकर्स में आपका स्वागत है। क्या आप नया ऑर्डर देना चाहते हैं?", timestamp: new Date(Date.now() - 1000 * 3600 * 5).toISOString() },
-      { role: 'user', content: "हाँ जी, मुझे कल शाम को 2 किलो का केक चाहिए।", timestamp: new Date(Date.now() - 1000 * 3600 * 5 + 15000).toISOString() }
+      { role: 'assistant', content: "Hello, welcome to Royal Bakery. Are you calling to place a new order or ask a question?", timestamp: new Date(Date.now() - 1000 * 3600 * 5).toISOString() },
+      { role: 'user', content: "Yes, I need information on ordering a 2kg cake for tomorrow evening.", timestamp: new Date(Date.now() - 1000 * 3600 * 5 + 15000).toISOString() }
     ],
     collected_data: { weight: '2kg', flavour: 'Vanilla' },
-    language_used: 'hi',
+    language_used: 'en',
     created_at: new Date(Date.now() - 1000 * 3600 * 6).toISOString(),
     updated_at: new Date().toISOString(),
     business: {
       id: 'biz-4',
       owner_id: 'demo',
-      name: 'रॉयल बेकर्स (Royal Bakers)',
+      name: 'Royal Bakery',
       type: 'cake_shop',
-      language: 'hi',
+      language: 'en',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
@@ -134,7 +131,6 @@ const SEED_CALLS: Call[] = [
 export default function CallsPage() {
   const [calls, setCalls] = useState<Call[]>(SEED_CALLS)
   const [businesses, setBusinesses] = useState<Business[]>([])
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [selectedBusiness, setSelectedBusiness] = useState('all')
   const [selectedStatus, setSelectedStatus] = useState('all')
@@ -161,8 +157,6 @@ export default function CallsPage() {
       }
     } catch {
       setCalls(SEED_CALLS)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -224,26 +218,26 @@ export default function CallsPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
+    <div className="p-8 lg:p-10 max-w-7xl w-full mx-auto space-y-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-zinc-800">
         <div>
-          <h1 className="text-xl lg:text-2xl font-bold tracking-tight text-white">Customer Call Records</h1>
-          <p className="text-xs lg:text-sm text-zinc-400 mt-1">
+          <h1 className="text-2xl font-bold tracking-tight text-white font-display">Customer Call Records</h1>
+          <p className="text-sm text-zinc-400 mt-1.5">
             Review captured customer details, transcripts, Google Calendar bookings, and follow-ups.
           </p>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={exportCSV}
-            className="btn-secondary text-xs py-2 px-3.5"
+            className="btn-secondary text-xs py-2.5 px-4"
           >
             <Download size={14} /> Export CSV
           </button>
           <Link
             href="/simulator"
-            className="btn-primary text-xs py-2 px-3.5"
+            className="btn-primary text-xs py-2.5 px-4 shadow-sm"
           >
             <PhoneCall size={14} /> Simulate Call
           </Link>
@@ -251,12 +245,12 @@ export default function CallsPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="glass-card p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+      <div className="glass-card p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
         <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
           <input
             type="text"
-            className="input-field pl-8 text-xs py-2"
+            className="input-field pl-9 text-xs py-2.5"
             placeholder="Search caller name, phone, intent..."
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -265,7 +259,7 @@ export default function CallsPage() {
 
         <div>
           <select
-            className="input-field text-xs py-2"
+            className="input-field text-xs py-2.5"
             value={selectedBusiness}
             onChange={e => setSelectedBusiness(e.target.value)}
           >
@@ -278,28 +272,28 @@ export default function CallsPage() {
 
         <div>
           <select
-            className="input-field text-xs py-2"
+            className="input-field text-xs py-2.5"
             value={selectedUrgency}
             onChange={e => setSelectedUrgency(e.target.value)}
           >
             <option value="all">All Priorities</option>
-            <option value="urgent">🔴 Urgent</option>
-            <option value="normal">⚪ Normal</option>
-            <option value="low">🟢 Low</option>
+            <option value="urgent">Urgent Priority</option>
+            <option value="normal">Normal Priority</option>
+            <option value="low">Low Priority</option>
           </select>
         </div>
 
         <div>
           <select
-            className="input-field text-xs py-2"
+            className="input-field text-xs py-2.5"
             value={selectedStatus}
             onChange={e => setSelectedStatus(e.target.value)}
           >
             <option value="all">All Follow-up Statuses</option>
-            <option value="pending">🟡 Pending Callback</option>
-            <option value="contacted">🟢 Contacted</option>
-            <option value="resolved">✓ Resolved</option>
-            <option value="closed">✕ Closed</option>
+            <option value="pending">Pending Callback</option>
+            <option value="contacted">Contacted</option>
+            <option value="resolved">Resolved</option>
+            <option value="closed">Closed</option>
           </select>
         </div>
       </div>
@@ -309,52 +303,48 @@ export default function CallsPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-zinc-800 text-zinc-400 font-medium uppercase tracking-wider text-[10px] bg-black/40">
-                <th className="p-3.5">Caller</th>
-                <th className="p-3.5">Business & Intent</th>
-                <th className="p-3.5">Priority</th>
-                <th className="p-3.5">Follow-up Status</th>
-                <th className="p-3.5">Date & Time</th>
-                <th className="p-3.5 text-right">Actions</th>
+              <tr className="border-b border-zinc-800 text-zinc-400 font-semibold uppercase tracking-wider text-[11px] bg-zinc-950/80">
+                <th className="py-4 px-6">Caller</th>
+                <th className="py-4 px-6">Business & Intent</th>
+                <th className="py-4 px-6">Priority</th>
+                <th className="py-4 px-6">Follow-up Status</th>
+                <th className="py-4 px-6">Date & Time</th>
+                <th className="py-4 px-6 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800 text-zinc-300">
               {filteredCalls.map(call => {
                 const biz = call.business as { name: string; type: string } | null
-                const typeInfo = biz?.type ? BUSINESS_TYPES[biz.type as keyof typeof BUSINESS_TYPES] : null
 
                 return (
-                  <tr key={call.id} className="hover:bg-zinc-900/40 transition-colors">
-                    <td className="p-3.5">
+                  <tr key={call.id} className="hover:bg-zinc-900/50 transition-colors">
+                    <td className="py-4 px-6">
                       <Link href={`/calls/${call.id}`} className="block group">
-                        <p className="font-semibold text-white group-hover:text-emerald-400 transition-colors">
+                        <p className="font-semibold text-white group-hover:text-emerald-400 transition-colors text-xs">
                           {call.caller_name || 'Anonymous Caller'}
                         </p>
-                        <p className="text-[11px] text-zinc-400 font-mono">{call.caller_phone || 'Direct line'}</p>
+                        <p className="text-[11px] text-zinc-400 font-mono mt-0.5">{call.caller_phone || 'Direct line'}</p>
                       </Link>
                     </td>
 
-                    <td className="p-3.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm">{typeInfo?.icon || '🏢'}</span>
-                        <div>
-                          <p className="text-white font-medium">{biz?.name || 'General'}</p>
-                          <p className="text-[11px] text-zinc-400 truncate max-w-[200px]">{call.intent}</p>
-                        </div>
+                    <td className="py-4 px-6">
+                      <div>
+                        <p className="text-white font-medium text-xs">{biz?.name || 'General'}</p>
+                        <p className="text-[11px] text-zinc-400 truncate max-w-[240px] mt-0.5">{call.intent}</p>
                       </div>
                     </td>
 
-                    <td className="p-3.5">
+                    <td className="py-4 px-6">
                       <span className={cn('badge', {
                         'badge-urgent': call.urgency === 'urgent',
                         'badge-new': call.urgency === 'normal',
                         'badge-completed': call.urgency === 'low'
                       })}>
-                        {call.urgency === 'urgent' ? '🔴 Urgent' : call.urgency === 'normal' ? '⚪ Normal' : '🟢 Low'}
+                        {call.urgency === 'urgent' ? 'Urgent' : call.urgency === 'normal' ? 'Normal' : 'Low'}
                       </span>
                     </td>
 
-                    <td className="p-3.5">
+                    <td className="py-4 px-6">
                       <select
                         value={call.follow_up_status}
                         onChange={e => {
@@ -367,26 +357,26 @@ export default function CallsPage() {
                           }
                           updateStatus(call.id, statusMap[val], val)
                         }}
-                        className="bg-zinc-900 border border-zinc-800 rounded text-xs py-1 px-2 text-white outline-none cursor-pointer hover:border-zinc-700"
+                        className="bg-zinc-900 border border-zinc-800 rounded-lg text-xs py-1.5 px-3 text-white outline-none cursor-pointer hover:border-zinc-700"
                       >
-                        <option value="pending">🟡 Pending</option>
-                        <option value="contacted">🟢 Contacted</option>
-                        <option value="resolved">✓ Resolved</option>
-                        <option value="closed">✕ Closed</option>
+                        <option value="pending">Pending</option>
+                        <option value="contacted">Contacted</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
                       </select>
                     </td>
 
-                    <td className="p-3.5 text-zinc-400 text-[11px]">
+                    <td className="py-4 px-6 text-zinc-400 text-[11px]">
                       <p className="text-white font-medium">{formatRelativeTime(call.created_at)}</p>
-                      <p className="text-zinc-500 text-[10px]">{formatDate(call.created_at)}</p>
+                      <p className="text-zinc-500 text-[10px] mt-0.5">{formatDate(call.created_at)}</p>
                     </td>
 
-                    <td className="p-3.5 text-right">
+                    <td className="py-4 px-6 text-right">
                       <Link
                         href={`/calls/${call.id}`}
-                        className="btn-secondary text-[11px] py-1 px-2.5 inline-flex items-center gap-1"
+                        className="btn-secondary text-[11px] py-1.5 px-3 inline-flex items-center gap-1.5"
                       >
-                        Details <ChevronRight size={12} />
+                        Details <ChevronRight size={13} />
                       </Link>
                     </td>
                   </tr>

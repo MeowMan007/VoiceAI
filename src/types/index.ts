@@ -113,39 +113,39 @@ export interface SimulatorMessage {
 
 export const BUSINESS_TYPES: Record<BusinessType, { label: string; icon: string; color: string; description: string }> = {
   cake_shop: {
-    label: 'Cake Shop / Bakery',
-    icon: '🎂',
-    color: 'from-pink-500 to-rose-500',
+    label: 'Bakery & Cake Shop',
+    icon: 'Bakery',
+    color: 'from-zinc-800 to-zinc-900',
     description: 'Handle cake orders, custom requests, and delivery queries'
   },
   clinic: {
-    label: 'Clinic / Doctor',
-    icon: '🏥',
-    color: 'from-blue-500 to-cyan-500',
+    label: 'Clinic & Healthcare',
+    icon: 'Clinic',
+    color: 'from-zinc-800 to-zinc-900',
     description: 'Manage appointments, patient enquiries, and scheduling'
   },
   real_estate: {
-    label: 'Real Estate',
-    icon: '🏠',
-    color: 'from-amber-500 to-orange-500',
+    label: 'Real Estate & Properties',
+    icon: 'Property',
+    color: 'from-zinc-800 to-zinc-900',
     description: 'Qualify leads, schedule viewings, and handle property enquiries'
   },
   delivery: {
-    label: 'Delivery / Logistics',
-    icon: '🚚',
-    color: 'from-green-500 to-emerald-500',
+    label: 'Logistics & Delivery',
+    icon: 'Dispatch',
+    color: 'from-zinc-800 to-zinc-900',
     description: 'Manage delivery requests, tracking, and logistics queries'
   },
   repair: {
-    label: 'Home / Repair Service',
-    icon: '🔧',
-    color: 'from-violet-500 to-purple-500',
+    label: 'Maintenance & Repairs',
+    icon: 'Service',
+    color: 'from-zinc-800 to-zinc-900',
     description: 'Handle service requests, urgency, and scheduling visits'
   },
   other: {
-    label: 'Other Business',
-    icon: '💼',
-    color: 'from-slate-500 to-gray-500',
+    label: 'General Business',
+    icon: 'General',
+    color: 'from-zinc-800 to-zinc-900',
     description: 'Custom workflow for any business type'
   }
 }
