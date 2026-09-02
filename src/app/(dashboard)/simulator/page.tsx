@@ -348,7 +348,7 @@ function SimulatorContent() {
         <div className="space-y-4">
           {/* Workflow Picker */}
           <div className="glass-card p-4">
-            <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-purple-400">
+            <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-emerald-400">
               Active Workflow
             </label>
             <select
@@ -369,7 +369,7 @@ function SimulatorContent() {
             </select>
 
             {selectedWorkflow && (
-              <div className="mt-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-xs space-y-1.5">
+              <div className="mt-3 p-3 rounded-xl bg-zinc-900 border border-zinc-800 text-xs space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-white flex items-center gap-1.5">
                     <span>{businessInfo?.icon || '🏢'}</span>
@@ -384,7 +384,7 @@ function SimulatorContent() {
                   <span className="text-zinc-300">{selectedWorkflow.post_action.replace(/_/g, ' ')}</span>
                 </p>
                 {selectedWorkflow.calendar_enabled && (
-                  <div className="flex items-center gap-1 text-blue-400 text-[11px] font-medium pt-1">
+                  <div className="flex items-center gap-1 text-emerald-400 text-[11px] font-medium pt-1">
                     <Calendar size={12} /> Google Calendar Tool Calling Enabled
                   </div>
                 )}
@@ -394,7 +394,7 @@ function SimulatorContent() {
 
           {/* Quick Trigger Test Prompts */}
           <div className="glass-card p-4">
-            <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-purple-400">
+            <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-emerald-400">
               ⚡ Quick Test Scenarios
             </label>
             <div className="space-y-1.5 text-xs">
@@ -411,9 +411,9 @@ function SimulatorContent() {
                     if (!started) startConversation(false)
                     setTimeout(() => sendMessage(scenario.text), started ? 50 : 400)
                   }}
-                  className="w-full text-left p-2 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:bg-purple-500/10 hover:border-purple-500/30 transition-colors"
+                  className="w-full text-left p-2 rounded-lg bg-zinc-900/60 border border-zinc-800 hover:border-emerald-500/40 hover:bg-zinc-900 transition-colors"
                 >
-                  <p className="font-medium text-zinc-300">{scenario.label}</p>
+                  <p className="font-medium text-zinc-200">{scenario.label}</p>
                   <p className="text-[11px] text-zinc-500 truncate mt-0.5">&quot;{scenario.text}&quot;</p>
                 </button>
               ))}
@@ -423,7 +423,7 @@ function SimulatorContent() {
           {/* Real-time Field Collector Visualizer */}
           {selectedWorkflow?.fields && (
             <div className="glass-card p-4">
-              <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-purple-400">
+              <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-emerald-400">
                 Target Data Fields
               </label>
               <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
@@ -436,11 +436,11 @@ function SimulatorContent() {
                         'flex items-center justify-between p-2 rounded-lg text-xs border transition-all',
                         hasData
                           ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                          : 'bg-white/[0.02] border-white/[0.05] text-zinc-400'
+                          : 'bg-zinc-900/40 border-zinc-800/80 text-zinc-400'
                       )}
                     >
                       <span className="flex items-center gap-1.5 truncate">
-                        {hasData ? <CheckCircle2 size={13} className="text-emerald-400 shrink-0" /> : <div className="w-3 h-3 rounded-full border border-zinc-600 shrink-0" />}
+                        {hasData ? <CheckCircle2 size={13} className="text-emerald-400 shrink-0" /> : <div className="w-3 h-3 rounded-full border border-zinc-700 shrink-0" />}
                         {field.label}
                         {field.required && <span className="text-rose-400">*</span>}
                       </span>
@@ -459,12 +459,12 @@ function SimulatorContent() {
           {/* Active Tool Calling Logs */}
           {toolLogs.length > 0 && (
             <div className="glass-card p-4">
-              <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-blue-400 flex items-center gap-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-emerald-400 flex items-center gap-1.5">
                 <Sparkles size={13} /> Active Tool Executions
               </label>
               <div className="space-y-1.5">
                 {toolLogs.map((log, i) => (
-                  <div key={i} className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs font-mono">
+                  <div key={i} className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-mono">
                     ⚡ {log}
                   </div>
                 ))}
@@ -477,75 +477,75 @@ function SimulatorContent() {
         <div className="lg:col-span-2 flex flex-col" style={{ height: 'calc(100vh - 180px)' }}>
           <div className="glass-card flex flex-col h-full overflow-hidden">
             {/* Call State Bar */}
-            <div className="p-4 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
+            <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/60">
               <div className="flex items-center gap-3">
                 <div
                   className={cn(
-                    'w-10 h-10 rounded-xl flex items-center justify-center transition-all',
+                    'w-9 h-9 rounded-lg flex items-center justify-center transition-all',
                     started
-                      ? 'bg-gradient-to-tr from-purple-600 to-blue-500 shadow-lg shadow-purple-500/30 animate-pulse'
-                      : 'bg-white/10 text-zinc-400'
+                      ? 'bg-emerald-500 text-black font-bold shadow-md shadow-emerald-500/20'
+                      : 'bg-zinc-900 text-zinc-500 border border-zinc-800'
                   )}
                 >
-                  <Mic size={18} className={started ? 'text-white' : 'text-zinc-400'} />
+                  <Mic size={16} />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="font-semibold text-sm">
+                    <p className="font-semibold text-sm text-white">
                       {(selectedWorkflow?.business as { name: string })?.name || 'Voice Assistant'}
                     </p>
                     <span
                       className={cn(
                         'w-2 h-2 rounded-full',
-                        started ? 'bg-emerald-400 animate-ping' : 'bg-zinc-600'
+                        started ? 'bg-emerald-400 animate-ping' : 'bg-zinc-700'
                       )}
                     />
                   </div>
                   <p className="text-xs text-zinc-400">
                     {started
-                      ? (isVoiceActive ? 'Voice Assistant On Call (Streaming STT/TTS)' : 'AI Simulator Active (Text & Tools)')
-                      : 'Call Idle • Click start to begin simulation'}
+                      ? (isVoiceActive ? 'Voice Assistant On Call (Live Audio Streaming)' : 'AI Simulator Active (Text & Autonomous Tools)')
+                      : 'Call Idle • Ready to simulate'}
                   </p>
                 </div>
               </div>
 
               {/* Waveform Animation on Voice Mode */}
               {started && isVoiceActive && (
-                <div className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20">
+                <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
                   <div className="wave-bar h-2" />
                   <div className="wave-bar h-4" />
                   <div className="wave-bar h-3" />
                   <div className="wave-bar h-5" />
                   <div className="wave-bar h-2" />
-                  <span className="text-[11px] font-medium text-purple-300 ml-1">Live Audio</span>
+                  <span className="text-[10px] font-medium text-emerald-400 ml-1">Streaming</span>
                 </div>
               )}
             </div>
 
             {/* Conversation Log Stream */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3.5">
               {!started ? (
                 <div className="h-full flex flex-col items-center justify-center text-center p-6 max-w-sm mx-auto">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-600/30 to-blue-600/30 border border-purple-500/30 flex items-center justify-center text-purple-400 mb-4 animate-pulse">
-                    <Phone size={28} />
+                  <div className="w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-emerald-400 mb-3 shadow-inner">
+                    <Phone size={24} />
                   </div>
-                  <h3 className="font-semibold text-lg text-white mb-1.5">Start Missed-Call Simulation</h3>
-                  <p className="text-xs text-zinc-400 leading-relaxed mb-6">
-                    Test how your personal AI assistant answers after a missed call, asks workflow questions, extracts customer details, and interacts with Google Calendar.
+                  <h3 className="font-semibold text-base text-white mb-1">Start Missed-Call Simulation</h3>
+                  <p className="text-xs text-zinc-400 leading-relaxed mb-5">
+                    Experience how your AI assistant handles missed calls, collects details, checks Google Calendar availability, and triggers external tools.
                   </p>
-                  <div className="flex flex-col sm:flex-row gap-3 w-full">
+                  <div className="flex flex-col sm:flex-row gap-2.5 w-full">
                     <button
                       id="start-simulation-btn"
                       onClick={() => startConversation(false)}
-                      className="btn-primary flex-1 py-2.5 text-xs flex items-center justify-center gap-2"
+                      className="btn-primary flex-1 py-2 text-xs flex items-center justify-center gap-1.5"
                     >
-                      <Phone size={14} /> Start Call Simulator
+                      <Phone size={13} /> Start Simulation
                     </button>
                     <button
                       onClick={() => startConversation(true)}
-                      className="btn-secondary flex-1 py-2.5 text-xs flex items-center justify-center gap-2 hover:border-purple-500/50"
+                      className="btn-secondary flex-1 py-2 text-xs flex items-center justify-center gap-1.5"
                     >
-                      <Volume2 size={14} className="text-purple-400" /> Voice Mode
+                      <Volume2 size={13} className="text-emerald-400" /> Voice Mode
                     </button>
                   </div>
                 </div>
@@ -554,35 +554,35 @@ function SimulatorContent() {
                   {messages.map(msg => (
                     <div
                       key={msg.id}
-                      className={cn('flex gap-3 animate-slide-up', msg.role === 'user' ? 'flex-row-reverse' : '')}
+                      className={cn('flex gap-2.5 animate-slide-up', msg.role === 'user' ? 'flex-row-reverse' : '')}
                     >
                       <div
                         className={cn(
-                          'w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-semibold',
+                          'w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold',
                           msg.role === 'user'
-                            ? 'bg-purple-500/20 text-purple-300'
-                            : 'bg-blue-500/20 text-blue-300'
+                            ? 'bg-emerald-500 text-black'
+                            : 'bg-zinc-800 text-white'
                         )}
                       >
                         {msg.role === 'user' ? '👤' : '🤖'}
                       </div>
                       <div
                         className={cn(
-                          'max-w-[82%] px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm',
+                          'max-w-[82%] px-4 py-2.5 rounded-xl text-xs leading-relaxed',
                           msg.role === 'user'
-                            ? 'rounded-tr-sm bg-gradient-to-r from-purple-600 to-indigo-600 text-white'
-                            : 'rounded-tl-sm bg-white/[0.04] border border-white/[0.08] text-zinc-200'
+                            ? 'rounded-tr-sm bg-emerald-500 text-black font-medium'
+                            : 'rounded-tl-sm bg-zinc-900 border border-zinc-800 text-zinc-200'
                         )}
                       >
-                        <p className="text-[10px] font-semibold uppercase tracking-wider opacity-60 mb-1">
+                        <p className={cn('text-[9px] font-mono uppercase tracking-wider mb-1', msg.role === 'user' ? 'text-black/70' : 'text-zinc-500')}>
                           {msg.role === 'user' ? 'Caller' : 'AI Assistant'}
                         </p>
                         {msg.isLoading ? (
                           <div className="flex items-center gap-1.5 py-1">
-                            <div className="typing-dot w-2 h-2 rounded-full bg-purple-400" />
-                            <div className="typing-dot w-2 h-2 rounded-full bg-purple-400" />
-                            <div className="typing-dot w-2 h-2 rounded-full bg-purple-400" />
-                            <span className="text-xs text-zinc-400 ml-2">Processing & checking tools...</span>
+                            <div className="typing-dot w-2 h-2 rounded-full bg-emerald-400" />
+                            <div className="typing-dot w-2 h-2 rounded-full bg-emerald-400" />
+                            <div className="typing-dot w-2 h-2 rounded-full bg-emerald-400" />
+                            <span className="text-[11px] text-zinc-400 ml-2">Checking tools & generating reply...</span>
                           </div>
                         ) : (
                           msg.content
@@ -597,16 +597,16 @@ function SimulatorContent() {
 
             {/* Input Bar */}
             {started && (
-              <div className="p-3 sm:p-4 border-t border-white/[0.08] bg-white/[0.01]">
+              <div className="p-3 sm:p-4 border-t border-zinc-800 bg-zinc-950/40">
                 <div className="flex items-center gap-2">
                   <input
                     id="simulator-message-input"
                     ref={inputRef}
                     type="text"
-                    className="input-field flex-1 text-sm py-2.5"
+                    className="input-field flex-1 text-xs py-2"
                     placeholder={
                       selectedWorkflow?.language === 'hi'
-                        ? 'यहाँ अपना संदेश टाइप करें (e.g. मुझे कल 4 बजे का समय चाहिए)...'
+                        ? 'यहाँ उत्तर टाइप करें (e.g. मुझे कल 4 बजे का समय चाहिए)...'
                         : 'Type your reply (e.g. Schedule a callback tomorrow at 4 PM)...'
                     }
                     value={input}
@@ -619,14 +619,14 @@ function SimulatorContent() {
                     id="send-message-btn"
                     onClick={() => sendMessage()}
                     disabled={!input.trim() || loading}
-                    className="btn-primary px-4 py-2.5 flex items-center justify-center shrink-0"
+                    className="btn-primary px-3.5 py-2 flex items-center justify-center shrink-0"
                   >
-                    <Send size={15} />
+                    <Send size={14} />
                   </button>
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-2 px-1">
-                  <span>💡 Try: &quot;Check availability tomorrow at 4 PM&quot; or &quot;Track order ORD-101&quot;</span>
-                  <span>{selectedWorkflow?.language === 'hi' ? '🇮🇳 Hindi Mode' : '🇬🇧 English Mode'}</span>
+                  <span>💡 Try: &quot;Schedule appointment tomorrow at 4 PM&quot; or &quot;Track order ORD-101&quot;</span>
+                  <span className="font-mono text-zinc-400">{selectedWorkflow?.language === 'hi' ? '🇮🇳 Hindi Mode' : '🇬🇧 English Mode'}</span>
                 </div>
               </div>
             )}

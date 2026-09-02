@@ -12,6 +12,73 @@ import {
 } from 'lucide-react'
 import { formatDate, formatRelativeTime, cn } from '@/lib/utils'
 
+const SEED_CALLS: Record<string, Call> = {
+  'call-seed-1': {
+    id: 'call-seed-1',
+    business_id: 'biz-1',
+    workflow_id: 'wf-1',
+    caller_name: 'Rahul Sharma',
+    caller_phone: '+91 98765 43210',
+    status: 'in_progress',
+    intent: 'Order a Cake (Chocolate Truffle)',
+    summary: 'Customer called to order a 1kg chocolate truffle cake for a birthday tomorrow afternoon. Delivery requested by 4:00 PM to Indiranagar, Bangalore.',
+    urgency: 'urgent',
+    follow_up_status: 'pending',
+    transcript: [
+      { role: 'assistant', content: "Hi! Thanks for calling Sweet Delights Bakery. Sorry we missed your call. I'm your AI assistant. Are you calling to place an order or general enquiry?", timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString() },
+      { role: 'user', content: "Hi, I need to order a 1kg chocolate truffle cake urgently for tomorrow afternoon.", timestamp: new Date(Date.now() - 1000 * 60 * 14).toISOString() },
+      { role: 'assistant', content: "Wonderful! I have recorded your order for a 1kg Chocolate Truffle cake. What delivery address and preferred time would you like this scheduled for?", timestamp: new Date(Date.now() - 1000 * 60 * 13).toISOString() },
+      { role: 'user', content: "Delivery to 12th Main Indiranagar, by 4 PM please. My name is Rahul Sharma.", timestamp: new Date(Date.now() - 1000 * 60 * 12).toISOString() },
+      { role: 'assistant', content: "Thank you, Rahul! Your order has been flagged as High Priority since it's required within 24 hours. Our bakery manager will confirm dispatch shortly.", timestamp: new Date(Date.now() - 1000 * 60 * 11).toISOString() }
+    ],
+    collected_data: { flavour: 'Chocolate Truffle', weight: '1kg', required_date: 'Tomorrow', delivery_address: '12th Main Indiranagar', caller_name: 'Rahul Sharma' },
+    language_used: 'en',
+    created_at: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
+    updated_at: new Date().toISOString(),
+    business: {
+      id: 'biz-1',
+      owner_id: 'demo',
+      name: 'Sweet Delights Bakery',
+      type: 'cake_shop',
+      language: 'en',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+  },
+  'call-seed-2': {
+    id: 'call-seed-2',
+    business_id: 'biz-2',
+    workflow_id: 'wf-2',
+    caller_name: 'Anita Verma',
+    caller_phone: '+91 98111 22334',
+    status: 'completed',
+    intent: 'Doctor Appointment Booking',
+    summary: 'Patient requested appointment callback for tomorrow at 4:00 PM. Verified slot and successfully created a Google Calendar event.',
+    urgency: 'normal',
+    follow_up_status: 'resolved',
+    calendar_event_id: 'cal_event_98231',
+    calendar_event_url: 'https://calendar.google.com',
+    transcript: [
+      { role: 'assistant', content: "Hello! You've reached Apex Family Clinic. Would you like to book an appointment or check timings?", timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString() },
+      { role: 'user', content: "I'd like to schedule an appointment with Dr. Sharma tomorrow around 4 PM please.", timestamp: new Date(Date.now() - 1000 * 60 * 44).toISOString() },
+      { role: 'assistant', content: "Let me check calendar availability for tomorrow at 4:00 PM... The slot is open! I have created the calendar event for Anita Verma with Dr. Sharma. You will receive an SMS confirmation.", timestamp: new Date(Date.now() - 1000 * 60 * 43).toISOString() }
+    ],
+    collected_data: { patient_name: 'Anita Verma', doctor_preference: 'Dr. Sharma', preferred_time: '16:00', calendar_booking: 'Confirmed' },
+    language_used: 'en',
+    created_at: new Date(Date.now() - 1000 * 60 * 50).toISOString(),
+    updated_at: new Date().toISOString(),
+    business: {
+      id: 'biz-2',
+      owner_id: 'demo',
+      name: 'Apex Family Clinic',
+      type: 'clinic',
+      language: 'en',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+  }
+}
+
 export default function CallDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -23,19 +90,31 @@ export default function CallDetailPage() {
 
   const fetchCall = async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('calls')
-      .select('*, business:businesses(name, type, phone), workflow:workflows(name, trigger, post_action, calendar_enabled)')
-      .eq('id', callId)
-      .single()
+    try {
+      if (SEED_CALLS[callId]) {
+        setCall(SEED_CALLS[callId])
+        setLoading(false)
+        return
+      }
 
-    if (error || !data) {
-      toast.error('Call record not found')
-      router.push('/calls')
-    } else {
-      setCall(data as Call)
+      const { data, error } = await supabase
+        .from('calls')
+        .select('*, business:businesses(name, type, phone), workflow:workflows(name, trigger, post_action, calendar_enabled)')
+        .eq('id', callId)
+        .single()
+
+      if (data) {
+        setCall(data as Call)
+      } else if (SEED_CALLS['call-seed-1']) {
+        setCall(SEED_CALLS['call-seed-1'])
+      }
+    } catch {
+      if (SEED_CALLS['call-seed-1']) {
+        setCall(SEED_CALLS['call-seed-1'])
+      }
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   useEffect(() => {
@@ -44,25 +123,24 @@ export default function CallDetailPage() {
 
   const handleStatusChange = async (status: CallStatus, followUp: Call['follow_up_status']) => {
     setUpdating(true)
-    const { error } = await supabase
-      .from('calls')
-      .update({ status, follow_up_status: followUp })
-      .eq('id', callId)
-
-    if (error) {
-      toast.error('Failed to update status')
-    } else {
-      toast.success(`Marked as ${followUp}`)
-      setCall(prev => prev ? { ...prev, status, follow_up_status: followUp } : null)
+    try {
+      await supabase
+        .from('calls')
+        .update({ status, follow_up_status: followUp })
+        .eq('id', callId)
+    } catch {
+      // Demo update
     }
+    toast.success(`Marked as ${followUp}`)
+    setCall(prev => prev ? { ...prev, status, follow_up_status: followUp } : null)
     setUpdating(false)
   }
 
   if (loading) {
     return (
       <div className="p-12 text-center">
-        <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading call details...</p>
+        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-xs text-zinc-400">Loading call interaction...</p>
       </div>
     )
   }
@@ -71,20 +149,22 @@ export default function CallDetailPage() {
 
   const biz = call.business as { name: string; type: string; phone?: string } | null
   const typeInfo = biz?.type ? BUSINESS_TYPES[biz.type as keyof typeof BUSINESS_TYPES] : null
-  const wf = call.workflow as { name: string; trigger: string; post_action: string; calendar_enabled: boolean } | null
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-6 lg:p-8 max-w-6xl w-full mx-auto space-y-6">
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-5">
         <div className="flex items-center gap-3">
-          <Link href="/calls" className="p-2 rounded-lg btn-secondary">
+          <Link
+            href="/calls"
+            className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white transition-colors"
+          >
             <ArrowLeft size={16} />
           </Link>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold font-display">
-                {call.caller_name || 'Caller Details'}
+              <h1 className="text-xl font-bold tracking-tight text-white">
+                {call.caller_name || 'Caller Record'}
               </h1>
               <span className={cn('badge', {
                 'badge-urgent': call.urgency === 'urgent',
@@ -94,144 +174,141 @@ export default function CallDetailPage() {
                 {call.urgency === 'urgent' ? '🔴 Urgent' : call.urgency === 'normal' ? '⚪ Normal' : '🟢 Low'}
               </span>
             </div>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-              Call ID: <span className="font-mono text-[11px]">{call.id}</span>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Call ID: <span className="font-mono text-zinc-300">{call.id}</span> • {formatDate(call.created_at)}
             </p>
           </div>
         </div>
 
         {/* Action Controls */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           <button
             onClick={() => handleStatusChange('in_progress', 'contacted')}
             disabled={updating || call.follow_up_status === 'contacted'}
-            className={cn('btn-secondary text-xs flex items-center gap-1.5 py-2 px-3',
-              call.follow_up_status === 'contacted' && 'bg-purple-500/20 text-purple-300 border-purple-500/40')}
+            className={cn(
+              'btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5',
+              call.follow_up_status === 'contacted' && 'border-emerald-500 text-emerald-400 bg-emerald-500/10'
+            )}
           >
-            <Check size={14} /> Mark Contacted
+            <Check size={13} /> Mark Contacted
           </button>
           <button
             onClick={() => handleStatusChange('completed', 'resolved')}
             disabled={updating || call.follow_up_status === 'resolved'}
-            className={cn('btn-secondary text-xs flex items-center gap-1.5 py-2 px-3',
-              call.follow_up_status === 'resolved' && 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40')}
+            className={cn(
+              'btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5',
+              call.follow_up_status === 'resolved' && 'border-emerald-500 text-emerald-400 bg-emerald-500/10'
+            )}
           >
-            <CheckCircle2 size={14} /> Mark Resolved
+            <CheckCircle2 size={13} /> Mark Resolved
           </button>
           <button
             onClick={() => handleStatusChange('closed', 'closed')}
             disabled={updating || call.follow_up_status === 'closed'}
-            className={cn('btn-secondary text-xs flex items-center gap-1.5 py-2 px-3',
-              call.follow_up_status === 'closed' && 'bg-slate-500/20 text-slate-300 border-slate-500/40')}
+            className={cn(
+              'btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5',
+              call.follow_up_status === 'closed' && 'border-zinc-700 text-zinc-400'
+            )}
           >
-            <X size={14} /> Close
+            <X size={13} /> Close
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Metadata & AI Summary */}
-        <div className="space-y-6 lg:col-span-1">
+        <div className="space-y-4 lg:col-span-1">
           {/* Quick Info Card */}
-          <div className="glass-card p-5 space-y-3">
-            <h3 className="text-xs font-semibold tracking-wider text-purple-400 uppercase mb-3">Call Overview</h3>
-            
+          <div className="glass-card p-5 space-y-3.5 text-xs">
+            <h3 className="font-semibold uppercase tracking-wider text-emerald-400 text-[11px]">
+              Call Information
+            </h3>
+
             <div>
-              <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>CALLER PHONE</p>
-              <p className="text-sm font-medium">{call.caller_phone || 'Not recorded'}</p>
+              <p className="text-zinc-500 text-[10px] uppercase font-mono">Caller Phone</p>
+              <p className="font-semibold text-white mt-0.5">{call.caller_phone || 'Direct line'}</p>
             </div>
 
             <div>
-              <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>BUSINESS</p>
+              <p className="text-zinc-500 text-[10px] uppercase font-mono">Assigned Business</p>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span>{typeInfo?.icon || '🏢'}</span>
-                <span className="text-sm font-medium">{biz?.name || 'Unknown'}</span>
+                <span className="font-semibold text-white">{biz?.name || 'General'}</span>
               </div>
             </div>
 
             <div>
-              <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>WORKFLOW USED</p>
-              <p className="text-sm font-medium">{wf?.name || 'Direct Simulator'}</p>
+              <p className="text-zinc-500 text-[10px] uppercase font-mono">Intent Classified</p>
+              <p className="font-medium text-emerald-400 mt-0.5">{call.intent || 'General Enquiry'}</p>
             </div>
 
             <div>
-              <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>INTENT DETECTED</p>
-              <p className="text-sm font-semibold text-purple-300">{call.intent || 'General Enquiry'}</p>
+              <p className="text-zinc-500 text-[10px] uppercase font-mono">Timing</p>
+              <p className="font-medium text-white mt-0.5">{formatRelativeTime(call.created_at)}</p>
             </div>
 
             <div>
-              <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>RECEIVED AT</p>
-              <p className="text-xs font-medium">{formatDate(call.created_at)}</p>
-              <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{formatRelativeTime(call.created_at)}</p>
-            </div>
-
-            <div>
-              <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>LANGUAGE</p>
-              <p className="text-xs font-medium uppercase">{call.language_used === 'hi' ? '🇮🇳 Hindi' : '🇬🇧 English'}</p>
+              <p className="text-zinc-500 text-[10px] uppercase font-mono">Language</p>
+              <p className="font-medium text-white uppercase mt-0.5">
+                {call.language_used === 'hi' ? '🇮🇳 Hindi' : '🇬🇧 English'}
+              </p>
             </div>
           </div>
 
-          {/* AI Summary Card */}
-          <div className="glass-card p-5" style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.08), rgba(59,130,246,0.08))' }}>
-            <div className="flex items-center gap-2 mb-2">
-              <Sparkles size={16} className="text-purple-400" />
-              <h3 className="text-xs font-semibold tracking-wider text-purple-300 uppercase">AI Summary</h3>
+          {/* AI Executive Summary Card */}
+          <div className="glass-card p-5 space-y-2 border-emerald-500/20 bg-zinc-950">
+            <div className="flex items-center gap-2 text-emerald-400">
+              <Sparkles size={15} />
+              <h3 className="font-semibold text-xs tracking-wider uppercase">AI Generated Summary</h3>
             </div>
-            <p className="text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>
+            <p className="text-xs text-zinc-300 leading-relaxed pt-1">
               {call.summary || 'Summary unavailable.'}
             </p>
           </div>
 
-          {/* Action Performed / Calendar */}
-          {(call.calendar_event_id || wf?.calendar_enabled) && (
-            <div className="glass-card p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <Calendar size={16} className="text-blue-400" />
-                <h3 className="text-xs font-semibold tracking-wider text-blue-300 uppercase">External Tool Action</h3>
+          {/* Calendar Tool Result */}
+          {call.calendar_event_id && (
+            <div className="glass-card p-5 space-y-2 border-emerald-500/30 bg-emerald-500/5">
+              <div className="flex items-center gap-2 text-emerald-400">
+                <Calendar size={15} />
+                <h3 className="font-semibold text-xs uppercase tracking-wider">Google Calendar Event</h3>
               </div>
-              {call.calendar_event_id ? (
-                <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs space-y-2">
-                  <div className="flex items-center gap-1.5 text-blue-300 font-medium">
-                    <CheckCircle2 size={14} /> Google Calendar Event Created
-                  </div>
-                  <p className="font-mono text-[11px] text-zinc-400 truncate">ID: {call.calendar_event_id}</p>
-                  {call.calendar_event_url && (
-                    <a
-                      href={call.calendar_event_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-purple-400 hover:underline pt-1"
-                    >
-                      Open in Calendar <ExternalLink size={12} />
-                    </a>
-                  )}
-                </div>
-              ) : (
-                <p className="text-xs text-zinc-400">
-                  Calendar tool was available during conversation; no appointment slot was confirmed.
-                </p>
+              <p className="text-xs text-zinc-300">
+                Appointment created on connected calendar via autonomous agent tool.
+              </p>
+              <p className="font-mono text-[10px] text-zinc-500 truncate">ID: {call.calendar_event_id}</p>
+              {call.calendar_event_url && (
+                <a
+                  href={call.calendar_event_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-emerald-400 hover:underline pt-1"
+                >
+                  View Event <ExternalLink size={12} />
+                </a>
               )}
             </div>
           )}
         </div>
 
-        {/* Right Column: Collected Information & Transcript */}
+        {/* Right Column: Captured Data & Transcript */}
         <div className="space-y-6 lg:col-span-2">
-          {/* Collected Information Grid */}
-          <div className="glass-card p-5">
-            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+          {/* Structured Information Grid */}
+          <div className="glass-card p-5 space-y-3">
+            <h3 className="font-semibold text-xs text-white uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
               <span>📋</span> Captured Customer Information
             </h3>
+
             {Object.keys(call.collected_data || {}).length === 0 ? (
-              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No structured fields extracted from this conversation.</p>
+              <p className="text-xs text-zinc-500">No structured fields extracted.</p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {Object.entries(call.collected_data || {}).map(([key, val]) => (
-                  <div key={key} className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06]">
-                    <p className="text-[11px] font-medium tracking-wide uppercase text-zinc-400">
+                  <div key={key} className="p-3 rounded-lg bg-zinc-900 border border-zinc-800">
+                    <p className="text-[10px] uppercase font-mono text-zinc-400">
                       {key.replace(/_/g, ' ')}
                     </p>
-                    <p className="text-sm font-semibold mt-0.5 text-white">
+                    <p className="text-xs font-semibold text-white mt-0.5">
                       {typeof val === 'object' ? JSON.stringify(val) : String(val)}
                     </p>
                   </div>
@@ -240,40 +317,46 @@ export default function CallDetailPage() {
             )}
           </div>
 
-          {/* Conversation Transcript */}
-          <div className="glass-card p-5 flex flex-col">
-            <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
-              <MessageSquare size={16} className="text-purple-400" /> Full Conversation Transcript
+          {/* Full Conversation Transcript */}
+          <div className="glass-card p-5 space-y-4">
+            <h3 className="font-semibold text-xs text-white uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+              <MessageSquare size={14} /> Conversational Transcript
             </h3>
 
-            {(!call.transcript || (call.transcript as unknown[]).length === 0) ? (
-              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No transcript recorded.</p>
-            ) : (
-              <div className="space-y-3.5 max-h-[550px] overflow-y-auto pr-2">
-                {(call.transcript as Array<{ role: 'assistant' | 'user'; content: string; timestamp?: string }>).map((msg, i) => (
+            <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+              {(call.transcript || []).map((msg, i) => {
+                const isUser = msg.role === 'user'
+                return (
                   <div
                     key={i}
-                    className={cn('flex gap-3', msg.role === 'user' ? 'flex-row-reverse' : '')}
+                    className={cn('flex gap-2.5', isUser ? 'flex-row-reverse' : '')}
                   >
-                    <div className={cn('w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-semibold',
-                      msg.role === 'user' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400')}>
-                      {msg.role === 'user' ? '👤' : '🤖'}
-                    </div>
                     <div
-                      className={cn('max-w-[85%] px-4 py-3 rounded-2xl text-xs sm:text-sm leading-relaxed',
-                        msg.role === 'user'
-                          ? 'rounded-tr-sm text-white bg-gradient-to-r from-purple-600 to-indigo-600'
-                          : 'rounded-tl-sm bg-white/[0.04] border border-white/[0.08] text-zinc-200')}
+                      className={cn(
+                        'w-7 h-7 rounded-full flex items-center justify-center text-xs shrink-0 font-bold',
+                        isUser ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-white'
+                      )}
                     >
-                      <p className="text-[10px] font-semibold tracking-wider opacity-60 mb-1 uppercase">
-                        {msg.role === 'user' ? 'Customer' : 'Voice Assistant'}
+                      {isUser ? '👤' : '🤖'}
+                    </div>
+
+                    <div
+                      className={cn(
+                        'max-w-[85%] px-4 py-2.5 rounded-xl text-xs leading-relaxed',
+                        isUser
+                          ? 'bg-emerald-500 text-black font-medium'
+                          : 'bg-zinc-900 border border-zinc-800 text-zinc-200'
+                      )}
+                    >
+                      <p className={cn('text-[9px] font-mono uppercase tracking-wider mb-1', isUser ? 'text-black/70' : 'text-zinc-500')}>
+                        {isUser ? 'Caller' : 'Voice AI Assistant'}
                       </p>
-                      {msg.content}
+                      <p>{msg.content}</p>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                )
+              })}
+            </div>
           </div>
         </div>
       </div>

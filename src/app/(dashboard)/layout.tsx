@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useState } from 'react'
 import {
   LayoutDashboard, Building2, GitBranch, PhoneCall,
-  Mic, Settings, LogOut, ChevronLeft, Menu, Zap
+  Mic, Settings, LogOut, ChevronLeft, Menu, Radio
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -14,7 +14,7 @@ const navItems = [
   { href: '/businesses', icon: Building2, label: 'Businesses' },
   { href: '/workflows', icon: GitBranch, label: 'Workflows' },
   { href: '/calls', icon: PhoneCall, label: 'Call Records' },
-  { href: '/simulator', icon: Mic, label: 'Simulator' },
+  { href: '/simulator', icon: Mic, label: 'AI Simulator' },
   { href: '/settings', icon: Settings, label: 'Settings' },
 ]
 
@@ -31,90 +31,100 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex min-h-screen" style={{ background: 'var(--bg-primary)' }}>
-      {/* Sidebar */}
+    <div className="flex min-h-screen bg-black text-white antialiased">
+      {/* Sidebar - Sticky, Flex-based (No overlapping) */}
       <aside
         className={cn(
-          'fixed left-0 top-0 h-screen flex flex-col transition-all duration-300 z-40',
+          'sticky top-0 h-screen shrink-0 flex flex-col bg-[#09090b] border-r border-zinc-800 transition-all duration-200 z-30',
           collapsed ? 'w-16' : 'w-60'
         )}
-        style={{ background: 'var(--bg-secondary)', borderRight: '1px solid var(--border)' }}
       >
-        {/* Logo */}
-        <div className="flex items-center gap-3 p-4 h-16" style={{ borderBottom: '1px solid var(--border)' }}>
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-            style={{ background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)' }}>
-            <Mic size={16} className="text-white" />
-          </div>
-          {!collapsed && (
-            <div>
-              <span className="font-bold text-sm font-display gradient-text">VoiceAI</span>
-              <div className="flex items-center gap-1">
-                <Zap size={10} style={{ color: 'var(--accent-purple)' }} />
-                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Assistant</span>
-              </div>
+        {/* Brand Header */}
+        <div className="flex items-center justify-between px-4 h-16 border-b border-zinc-800">
+          <Link href="/" className="flex items-center gap-2.5 overflow-hidden">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center text-black font-bold shrink-0">
+              <Mic size={16} strokeWidth={2.5} />
             </div>
-          )}
+            {!collapsed && (
+              <div className="flex flex-col">
+                <span className="font-semibold text-sm tracking-tight text-white">VoiceAI</span>
+                <span className="text-[10px] text-zinc-400 flex items-center gap-1 font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  ASSISTANT
+                </span>
+              </div>
+            )}
+          </Link>
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className={cn('ml-auto p-1 rounded-lg transition-colors', collapsed && 'mx-auto')}
-            style={{ color: 'var(--text-muted)' }}
-            id="sidebar-toggle"
+            className="p-1 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            title={collapsed ? 'Expand' : 'Collapse'}
           >
             {collapsed ? <Menu size={16} /> : <ChevronLeft size={16} />}
           </button>
         </div>
 
-        {/* Nav Items */}
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        {/* Navigation */}
+        <nav className="flex-1 px-2.5 py-4 space-y-1 overflow-y-auto">
           {navItems.map(item => {
             const active = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                id={`nav-${item.label.toLowerCase().replace(' ', '-')}`}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group',
+                  'flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all',
                   active
-                    ? 'text-white'
-                    : 'hover:text-white'
+                    ? 'bg-zinc-800/80 text-white border-l-2 border-emerald-500 pl-2.5'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
                 )}
-                style={{
-                  background: active ? 'linear-gradient(135deg, rgba(139,92,246,0.2), rgba(59,130,246,0.2))' : 'transparent',
-                  color: active ? 'white' : 'var(--text-secondary)',
-                  borderLeft: active ? '2px solid #8b5cf6' : '2px solid transparent',
-                }}
               >
-                <item.icon size={18} className="shrink-0" />
-                {!collapsed && <span className="text-sm font-medium">{item.label}</span>}
+                <item.icon
+                  size={16}
+                  className={cn(active ? 'text-emerald-400' : 'text-zinc-400')}
+                />
+                {!collapsed && <span className="truncate">{item.label}</span>}
               </Link>
             )
           })}
         </nav>
 
-        {/* Logout */}
-        <div className="p-3" style={{ borderTop: '1px solid var(--border)' }}>
+        {/* Simulator Call Quick Access */}
+        {!collapsed && (
+          <div className="p-3 m-2.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs">
+            <div className="flex items-center gap-2 mb-1 text-emerald-400 font-medium">
+              <Radio size={13} className="animate-pulse" />
+              <span>Voice Engine Ready</span>
+            </div>
+            <p className="text-[11px] text-zinc-400 leading-relaxed mb-2">
+              Test missed-call voice agent with tool calling.
+            </p>
+            <Link
+              href="/simulator"
+              className="block w-full text-center py-1.5 rounded bg-emerald-500 text-black font-semibold text-[11px] hover:bg-emerald-400 transition-colors"
+            >
+              Test Simulator
+            </Link>
+          </div>
+        )}
+
+        {/* Sign Out */}
+        <div className="p-3 border-t border-zinc-800">
           <button
-            id="logout-btn"
             onClick={handleLogout}
             className={cn(
-              'flex items-center gap-3 px-3 py-2.5 rounded-xl w-full transition-colors',
-              collapsed && 'justify-center'
+              'flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors w-full',
+              collapsed && 'justify-center px-0'
             )}
-            style={{ color: 'var(--text-muted)' }}
           >
-            <LogOut size={18} />
-            {!collapsed && <span className="text-sm font-medium">Sign Out</span>}
+            <LogOut size={15} />
+            {!collapsed && <span>Sign Out</span>}
           </button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main
-        className={cn('flex-1 min-h-screen transition-all duration-300', collapsed ? 'ml-16' : 'ml-60')}
-        style={{ background: 'var(--bg-primary)' }}
-      >
+      {/* Main Content Area (Clean flex item, zero cutoffs) */}
+      <main className="flex-1 min-w-0 bg-black flex flex-col">
         {children}
       </main>
     </div>
