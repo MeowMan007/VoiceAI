@@ -15,26 +15,62 @@ export async function generateChatResponse(
   messages: ChatMessage[],
   tools?: OpenAI.Chat.ChatCompletionTool[]
 ) {
-  // If no valid OpenAI key is set, use intelligent simulation engine
-  if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.includes('your_') || process.env.OPENAI_API_KEY === 'dummy_key_for_build') {
-    return generateSimulatedResponse(messages, tools)
+  // 1. First check if user provided Google Gemini API Key (Gemini Plus / AI Studio)
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY
+  if (geminiKey && !geminiKey.includes('your_')) {
+    try {
+      // Check for tool calling trigger first
+      const simulated = generateSimulatedResponse(messages, tools)
+      if (simulated.finish_reason === 'tool_calls') {
+        return simulated
+      }
+
+      const { GoogleGenerativeAI } = await import('@google/generative-ai')
+      const genAI = new GoogleGenerativeAI(geminiKey)
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+      const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || ''
+      const systemInstruction = messages.find(m => m.role === 'system')?.content || ''
+
+      const result = await model.generateContent([
+        { text: `System context: ${systemInstruction}` },
+        { text: `Customer message: ${lastUserMsg}` }
+      ])
+      const text = result.response.text()
+        return {
+          index: 0,
+          finish_reason: 'stop',
+          logprobs: null,
+          message: {
+            role: 'assistant',
+            content: text,
+            refusal: null,
+            tool_calls: undefined
+          }
+        } as OpenAI.Chat.ChatCompletion.Choice
+    } catch (err) {
+      console.warn('Gemini API call failed, using intelligent simulation engine:', err)
+    }
   }
 
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages,
-      tools: tools?.length ? tools : undefined,
-      tool_choice: tools?.length ? 'auto' : undefined,
-      temperature: 0.7,
-      max_tokens: 500,
-    })
-
-    return response.choices[0]
-  } catch (error) {
-    console.warn('OpenAI API call failed, falling back to simulated response:', error)
-    return generateSimulatedResponse(messages, tools)
+  // 2. Next check if OpenAI API key is provided
+  if (process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes('your_') && process.env.OPENAI_API_KEY !== 'dummy_key_for_build') {
+    try {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages,
+        tools: tools?.length ? tools : undefined,
+        tool_choice: tools?.length ? 'auto' : undefined,
+        temperature: 0.7,
+        max_tokens: 500,
+      })
+      return response.choices[0]
+    } catch (error) {
+      console.warn('OpenAI API call failed, falling back to simulated response:', error)
+    }
   }
+
+  // 3. Fallback to smart offline tool-calling engine
+  return generateSimulatedResponse(messages, tools)
 }
 
 function generateSimulatedResponse(
