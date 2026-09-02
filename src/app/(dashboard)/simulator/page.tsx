@@ -348,7 +348,10 @@ function SimulatorContent() {
       vapi.on('error', (err: unknown) => {
         console.error('Vapi error:', err)
         setVapiLoading(false)
-        toast.error('Voice connection error')
+        const errMsg = (err as { message?: string; error?: { message?: string } })?.error?.message ||
+                       (err as { message?: string })?.message ||
+                       'Voice connection error. Please verify your Vapi Public Key.'
+        toast.error(errMsg, { duration: 5000 })
       })
 
       const bizName = (selectedWorkflow.business as { name: string })?.name || 'our business'
@@ -383,10 +386,11 @@ function SimulatorContent() {
 
       setStarted(true)
       setMessages([{ id: uuidv4(), role: 'assistant', content: greeting, timestamp: new Date() }])
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to start Vapi call:', err)
       setVapiLoading(false)
-      toast.error('Could not connect voice call. Check your Vapi key.')
+      const msg = (err as { message?: string })?.message || 'Could not connect voice call. Check your Vapi Public Key.'
+      toast.error(msg, { duration: 5000 })
     }
   }, [selectedWorkflow])
 
