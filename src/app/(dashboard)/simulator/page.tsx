@@ -218,10 +218,20 @@ function SimulatorContent() {
         .filter(m => !m.isLoading)
         .map(m => ({ role: m.role, content: m.content }))
 
+      let aiConfig = undefined
+      try {
+        const savedConfig = localStorage.getItem('voiceai_ai_config')
+        if (savedConfig) {
+          aiConfig = JSON.parse(savedConfig)
+        }
+      } catch {
+        // ignore
+      }
+
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiMessages, workflow: selectedWorkflow })
+        body: JSON.stringify({ messages: apiMessages, workflow: selectedWorkflow, aiConfig })
       })
       const data = await res.json()
 

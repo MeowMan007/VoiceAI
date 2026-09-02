@@ -5,7 +5,7 @@ import { Workflow, Business, BUSINESS_TYPES, WORKFLOW_TEMPLATES } from '@/types'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { Plus, GitBranch, Pencil, Trash2, Power, Calendar, Play } from 'lucide-react'
-import { formatDate, cn } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 
 const SEED_WORKFLOWS: (Workflow & { business: Business })[] = [
   {
@@ -61,7 +61,7 @@ const SEED_WORKFLOWS: (Workflow & { business: Business })[] = [
   {
     id: 'wf-seed-3',
     business_id: 'biz-seed-3',
-    name: 'Delivery Request & Live Parcel Tracking',
+    name: 'Courier Status & Package Routing',
     trigger: 'missed_call',
     greeting: WORKFLOW_TEMPLATES.delivery.greeting!,
     closing_message: WORKFLOW_TEMPLATES.delivery.closing_message!,
@@ -86,10 +86,10 @@ const SEED_WORKFLOWS: (Workflow & { business: Business })[] = [
   {
     id: 'wf-seed-4',
     business_id: 'biz-seed-4',
-    name: 'Real Estate Lead Qualification & Tour Booking',
+    name: 'Property Viewing & Buyer Advisory',
     trigger: 'missed_call',
-    greeting: "Hello, thank you for calling Prestige Property Realty. Sorry we missed your call. Are you interested in purchasing, renting, or scheduling a property visit?",
-    closing_message: "Thank you for sharing your preferences. Our property consultant will follow up shortly. Have a great day!",
+    greeting: WORKFLOW_TEMPLATES.real_estate.greeting!,
+    closing_message: WORKFLOW_TEMPLATES.real_estate.closing_message!,
     language: 'en',
     fields: WORKFLOW_TEMPLATES.real_estate.fields!,
     conditions: WORKFLOW_TEMPLATES.real_estate.conditions!,
@@ -111,7 +111,7 @@ const SEED_WORKFLOWS: (Workflow & { business: Business })[] = [
 ]
 
 export default function WorkflowsPage() {
-  const [workflows, setWorkflows] = useState<Workflow[]>(SEED_WORKFLOWS)
+  const [workflows, setWorkflows] = useState<(Workflow & { business: Business })[]>(SEED_WORKFLOWS)
   const supabase = createClient()
 
   const fetchWorkflows = async () => {
@@ -122,7 +122,7 @@ export default function WorkflowsPage() {
         .order('created_at', { ascending: false })
 
       if (data && data.length > 0) {
-        setWorkflows(data as unknown as Workflow[])
+        setWorkflows(data as unknown as (Workflow & { business: Business })[])
       } else {
         setWorkflows(SEED_WORKFLOWS)
       }
@@ -158,93 +158,136 @@ export default function WorkflowsPage() {
   }
 
   return (
-    <div className="p-8 lg:p-10 max-w-7xl w-full mx-auto space-y-8">
+    <div className="page-container">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-zinc-800">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white font-display">Missed-Call Workflows</h1>
-          <p className="text-sm text-zinc-400 mt-1.5">
+          <h1 className="page-title">Missed-Call Workflows</h1>
+          <p className="page-subtitle">
             Configure how your AI voice assistant greets callers, asks questions, checks tools, and handles follow-ups.
           </p>
         </div>
-        <Link
-          href="/workflows/new"
-          id="create-workflow-btn"
-          className="btn-primary text-xs py-2.5 px-4 shadow-sm"
-        >
+        <Link href="/workflows/new" id="create-workflow-btn" className="btn-primary">
           <Plus size={14} /> Create Workflow
         </Link>
       </div>
 
       {/* Workflows List */}
-      <div className="space-y-4">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {workflows.map(wf => {
-          const typeInfo = wf.business?.type ? BUSINESS_TYPES[wf.business.type as keyof typeof BUSINESS_TYPES] : null
           const fieldCount = (wf.fields as unknown[])?.length || 0
           const conditionCount = (wf.conditions as unknown[])?.length || 0
 
           return (
             <div
               key={wf.id}
-              className={cn(
-                'glass-card p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-5 transition-all hover:border-zinc-700',
-                !wf.is_active && 'opacity-60 bg-zinc-950'
-              )}
+              className="glass-card"
+              style={{
+                padding: '20px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '20px',
+                opacity: wf.is_active ? 1 : 0.6
+              }}
             >
-              <div className="flex items-start gap-4 min-w-0">
-                <div className="w-11 h-11 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-emerald-400 shrink-0 mt-0.5">
-                  <GitBranch size={20} />
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', minWidth: 0 }}>
+                <div
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'var(--bg-inset)',
+                    border: '1px solid var(--border-subtle)',
+                    color: 'var(--green)',
+                    flexShrink: 0,
+                    marginTop: '2px'
+                  }}
+                >
+                  <GitBranch size={18} />
                 </div>
-                <div className="min-w-0 space-y-1">
-                  <div className="flex flex-wrap items-center gap-2.5 mb-1">
-                    <h3 className="font-bold text-sm text-white">{wf.name}</h3>
-                    <span className={cn('badge uppercase text-[10px] tracking-wider', wf.is_active ? 'badge-completed' : 'badge-closed')}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '4px' }}>
+                    <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff' }}>{wf.name}</h3>
+                    <span className={cn('badge', wf.is_active ? 'badge-completed' : 'badge-closed')}>
                       {wf.is_active ? 'Active' : 'Paused'}
                     </span>
                     {wf.calendar_enabled && (
-                      <span className="badge badge-contacted flex items-center gap-1.5 text-[11px]">
-                        <Calendar size={11} /> Google Calendar
+                      <span className="badge badge-contacted" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <Calendar size={10} /> Google Calendar
                       </span>
                     )}
                   </div>
 
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    <span className="text-white font-medium">{wf.business?.name}</span> • Trigger: Missed Call • {fieldCount} data fields • {conditionCount} conditional rules
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    <span style={{ color: '#ffffff', fontWeight: 500 }}>{wf.business?.name}</span>
+                    &nbsp;&middot;&nbsp;Missed Call Trigger&nbsp;&middot;&nbsp;{fieldCount} collected fields&nbsp;&middot;&nbsp;{conditionCount} conditional rules
                   </p>
                 </div>
               </div>
 
               {/* Action Controls */}
-              <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                 <Link
                   href={`/simulator?workflow=${wf.id}`}
-                  className="btn-primary text-xs py-2 px-3.5 flex items-center gap-1.5 shadow-sm"
+                  className="btn-primary"
+                  style={{ padding: '7px 12px', fontSize: '12px' }}
                 >
-                  <Play size={12} fill="currentColor" /> Test Call
+                  <Play size={11} fill="currentColor" /> Test Call
                 </Link>
 
                 <button
                   onClick={() => toggleActive(wf.id, wf.is_active)}
-                  className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                  style={{
+                    padding: '7px 10px',
+                    borderRadius: '8px',
+                    background: 'var(--bg-inset)',
+                    border: '1px solid var(--border-subtle)',
+                    color: wf.is_active ? 'var(--green)' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center'
+                  }}
                   title={wf.is_active ? 'Pause Workflow' : 'Activate Workflow'}
                 >
-                  <Power size={14} className={wf.is_active ? 'text-emerald-400' : 'text-zinc-500'} />
+                  <Power size={13} />
                 </button>
 
                 <Link
                   href={`/workflows/${wf.id}`}
-                  className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                  style={{
+                    padding: '7px 10px',
+                    borderRadius: '8px',
+                    background: 'var(--bg-inset)',
+                    border: '1px solid var(--border-subtle)',
+                    color: 'var(--text-secondary)',
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center'
+                  }}
                   title="Edit Workflow"
                 >
-                  <Pencil size={14} />
+                  <Pencil size={13} />
                 </Link>
 
                 <button
                   onClick={() => handleDelete(wf.id, wf.name)}
-                  className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                  style={{
+                    padding: '7px 10px',
+                    borderRadius: '8px',
+                    background: 'var(--bg-inset)',
+                    border: '1px solid var(--border-subtle)',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center'
+                  }}
                   title="Delete Workflow"
                 >
-                  <Trash2 size={14} />
+                  <Trash2 size={13} />
                 </button>
               </div>
             </div>

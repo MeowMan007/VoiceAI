@@ -11,31 +11,43 @@ export interface ChatMessage {
   content: string
 }
 
+export interface GenerateOptions {
+  provider?: 'gemini' | 'openai' | 'simulator'
+  apiKey?: string
+  model?: string
+}
+
 export async function generateChatResponse(
   messages: ChatMessage[],
-  tools?: OpenAI.Chat.ChatCompletionTool[]
+  tools?: OpenAI.Chat.ChatCompletionTool[],
+  options?: GenerateOptions
 ) {
-  // 1. First check if user provided Google Gemini API Key (Gemini Plus / AI Studio)
-  const geminiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY
-  if (geminiKey && !geminiKey.includes('your_')) {
-    try {
-      // Check for tool calling trigger first
-      const simulated = generateSimulatedResponse(messages, tools)
-      if (simulated.finish_reason === 'tool_calls') {
-        return simulated
-      }
+  const chosenProvider = options?.provider || (process.env.GEMINI_API_KEY ? 'gemini' : process.env.OPENAI_API_KEY ? 'openai' : 'gemini')
+  const customKey = options?.apiKey?.trim()
+  const customModel = options?.model
 
-      const { GoogleGenerativeAI } = await import('@google/generative-ai')
-      const genAI = new GoogleGenerativeAI(geminiKey)
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
-      const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || ''
-      const systemInstruction = messages.find(m => m.role === 'system')?.content || ''
+  // 1. Google Gemini Provider
+  if (chosenProvider === 'gemini' || (!customKey && process.env.GEMINI_API_KEY)) {
+    const geminiKey = customKey || process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY
+    if (geminiKey && !geminiKey.includes('your_')) {
+      try {
+        const simulated = generateSimulatedResponse(messages, tools)
+        if (simulated.finish_reason === 'tool_calls') {
+          return simulated
+        }
 
-      const result = await model.generateContent([
-        { text: `System context: ${systemInstruction}` },
-        { text: `Customer message: ${lastUserMsg}` }
-      ])
-      const text = result.response.text()
+        const { GoogleGenerativeAI } = await import('@google/generative-ai')
+        const genAI = new GoogleGenerativeAI(geminiKey)
+        const modelName = customModel || 'gemini-1.5-flash'
+        const model = genAI.getGenerativeModel({ model: modelName })
+        const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || ''
+        const systemInstruction = messages.find(m => m.role === 'system')?.content || ''
+
+        const result = await model.generateContent([
+          { text: `System context: ${systemInstruction}` },
+          { text: `Customer message: ${lastUserMsg}` }
+        ])
+        const text = result.response.text()
         return {
           index: 0,
           finish_reason: 'stop',
@@ -47,29 +59,35 @@ export async function generateChatResponse(
             tool_calls: undefined
           }
         } as OpenAI.Chat.ChatCompletion.Choice
-    } catch (err) {
-      console.warn('Gemini API call failed, using intelligent simulation engine:', err)
+      } catch (err) {
+        console.warn('Gemini API call failed, using intelligent simulation engine:', err)
+      }
     }
   }
 
-  // 2. Next check if OpenAI API key is provided
-  if (process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes('your_') && process.env.OPENAI_API_KEY !== 'dummy_key_for_build') {
-    try {
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages,
-        tools: tools?.length ? tools : undefined,
-        tool_choice: tools?.length ? 'auto' : undefined,
-        temperature: 0.7,
-        max_tokens: 500,
-      })
-      return response.choices[0]
-    } catch (error) {
-      console.warn('OpenAI API call failed, falling back to simulated response:', error)
+  // 2. OpenAI Provider
+  if (chosenProvider === 'openai' || (!customKey && process.env.OPENAI_API_KEY)) {
+    const openaiKey = customKey || process.env.OPENAI_API_KEY
+    if (openaiKey && !openaiKey.includes('your_') && openaiKey !== 'dummy_key_for_build') {
+      try {
+        const client = customKey ? new OpenAI({ apiKey: customKey }) : openai
+        const modelName = customModel || 'gpt-4o'
+        const response = await client.chat.completions.create({
+          model: modelName,
+          messages,
+          tools: tools?.length ? tools : undefined,
+          tool_choice: tools?.length ? 'auto' : undefined,
+          temperature: 0.7,
+          max_tokens: 500,
+        })
+        return response.choices[0]
+      } catch (error) {
+        console.warn('OpenAI API call failed, falling back to simulated response:', error)
+      }
     }
   }
 
-  // 3. Fallback to smart offline tool-calling engine
+  // 3. Fallback to smart autonomous simulation engine
   return generateSimulatedResponse(messages, tools)
 }
 

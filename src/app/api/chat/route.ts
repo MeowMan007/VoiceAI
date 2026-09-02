@@ -7,7 +7,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { messages, workflow, calendarAccessToken } = body
+    const { messages, workflow, calendarAccessToken, aiConfig } = body
 
     if (!workflow || !messages) {
       return NextResponse.json({ error: 'Missing workflow or messages' }, { status: 400 })
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       ...messages
     ]
 
-    const choice = await generateChatResponse(allMessages, tools)
+    const choice = await generateChatResponse(allMessages, tools, aiConfig)
 
     if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {
       const toolCall = choice.message.tool_calls[0]

@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Call, Business, BUSINESS_TYPES, CallStatus } from '@/types'
+import { Call, Business, CallStatus } from '@/types'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { PhoneCall, Search, Download, ChevronRight } from 'lucide-react'
@@ -20,7 +20,7 @@ const SEED_CALLS: Call[] = [
     urgency: 'urgent',
     follow_up_status: 'pending',
     transcript: [
-      { role: 'assistant', content: "Hello, thanks for calling Sweet Delights Bakery. Sorry we missed your call. How can I assist you with your order today?", timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString() },
+      { role: 'assistant', content: "Hello, thanks for calling Sweet Delights Bakery. How can I assist you with your order today?", timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString() },
       { role: 'user', content: "Hi, I need to order a 1kg chocolate truffle cake urgently for tomorrow afternoon.", timestamp: new Date(Date.now() - 1000 * 60 * 14).toISOString() }
     ],
     collected_data: { flavour: 'Chocolate Truffle', weight: '1kg', required_date: 'Tomorrow' },
@@ -76,7 +76,7 @@ const SEED_CALLS: Call[] = [
     caller_phone: '+91 99887 76655',
     status: 'completed',
     intent: 'Package Status Tracking (ORD-101)',
-    summary: 'Caller inquired about tracking status for ORD-101. External delivery API queried: Package is out for delivery with courier.',
+    summary: 'Caller inquired about tracking status for ORD-101. Delivery API queried: Package is out for delivery with courier.',
     urgency: 'normal',
     follow_up_status: 'contacted',
     transcript: [
@@ -132,18 +132,15 @@ export default function CallsPage() {
   const [calls, setCalls] = useState<Call[]>(SEED_CALLS)
   const [businesses, setBusinesses] = useState<Business[]>([])
   const [search, setSearch] = useState('')
-  const [selectedBusiness, setSelectedBusiness] = useState('all')
-  const [selectedStatus, setSelectedStatus] = useState('all')
-  const [selectedUrgency, setSelectedUrgency] = useState('all')
+  const [selectedBusiness, setSelectedBusiness] = useState<string>('all')
+  const [selectedStatus, setSelectedStatus] = useState<string>('all')
+  const [selectedUrgency, setSelectedUrgency] = useState<string>('all')
   const supabase = createClient()
 
   const fetchCallsAndBusinesses = async () => {
     try {
       const [{ data: callsData }, { data: bizData }] = await Promise.all([
-        supabase
-          .from('calls')
-          .select('*, business:businesses(name, type), workflow:workflows(name)')
-          .order('created_at', { ascending: false }),
+        supabase.from('calls').select('*, business:businesses(name, type)').order('created_at', { ascending: false }),
         supabase.from('businesses').select('*')
       ])
 
@@ -218,39 +215,42 @@ export default function CallsPage() {
   }
 
   return (
-    <div className="p-8 lg:p-10 max-w-7xl w-full mx-auto space-y-8">
+    <div className="page-container">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-zinc-800">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white font-display">Customer Call Records</h1>
-          <p className="text-sm text-zinc-400 mt-1.5">
-            Review captured customer details, transcripts, Google Calendar bookings, and follow-ups.
+          <h1 className="page-title">Customer Call Records</h1>
+          <p className="page-subtitle">
+            Review captured details, transcripts, Google Calendar bookings, and follow-ups.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={exportCSV}
-            className="btn-secondary text-xs py-2.5 px-4"
-          >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          <button type="button" onClick={exportCSV} className="btn-secondary">
             <Download size={14} /> Export CSV
           </button>
-          <Link
-            href="/simulator"
-            className="btn-primary text-xs py-2.5 px-4 shadow-sm"
-          >
+          <Link href="/simulator" className="btn-primary">
             <PhoneCall size={14} /> Simulate Call
           </Link>
         </div>
       </div>
 
       {/* Filter Bar */}
-      <div className="glass-card p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
-        <div className="relative">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+      <div
+        className="glass-card"
+        style={{
+          padding: '16px 20px',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '12px',
+          marginBottom: '24px'
+        }}
+      >
+        <div style={{ position: 'relative' }}>
+          <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
           <input
             type="text"
-            className="input-field pl-9 text-xs py-2.5"
+            className="input-field"
+            style={{ paddingLeft: '34px' }}
             placeholder="Search caller name, phone, intent..."
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -259,7 +259,7 @@ export default function CallsPage() {
 
         <div>
           <select
-            className="input-field text-xs py-2.5"
+            className="input-field"
             value={selectedBusiness}
             onChange={e => setSelectedBusiness(e.target.value)}
           >
@@ -272,7 +272,7 @@ export default function CallsPage() {
 
         <div>
           <select
-            className="input-field text-xs py-2.5"
+            className="input-field"
             value={selectedUrgency}
             onChange={e => setSelectedUrgency(e.target.value)}
           >
@@ -285,7 +285,7 @@ export default function CallsPage() {
 
         <div>
           <select
-            className="input-field text-xs py-2.5"
+            className="input-field"
             value={selectedStatus}
             onChange={e => setSelectedStatus(e.target.value)}
           >
@@ -298,43 +298,49 @@ export default function CallsPage() {
         </div>
       </div>
 
-      {/* Call Table */}
-      <div className="glass-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+      {/* Call Table Card */}
+      <div className="glass-card" style={{ overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="w-full text-left" style={{ fontSize: '12px', borderCollapse: 'collapse' }}>
             <thead>
-              <tr className="border-b border-zinc-800 text-zinc-400 font-semibold uppercase tracking-wider text-[11px] bg-zinc-950/80">
-                <th className="py-4 px-6">Caller</th>
-                <th className="py-4 px-6">Business & Intent</th>
-                <th className="py-4 px-6">Priority</th>
-                <th className="py-4 px-6">Follow-up Status</th>
-                <th className="py-4 px-6">Date & Time</th>
-                <th className="py-4 px-6 text-right">Actions</th>
+              <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
+                {['Caller', 'Business & Intent', 'Priority', 'Follow-up Status', 'Date & Time', ''].map((h, i) => (
+                  <th key={h} style={{ padding: '14px 24px', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', ...(i === 5 ? { textAlign: 'right' } : {}) }}>
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-800 text-zinc-300">
+            <tbody>
               {filteredCalls.map(call => {
                 const biz = call.business as { name: string; type: string } | null
 
                 return (
-                  <tr key={call.id} className="hover:bg-zinc-900/50 transition-colors">
-                    <td className="py-4 px-6">
-                      <Link href={`/calls/${call.id}`} className="block group">
-                        <p className="font-semibold text-white group-hover:text-emerald-400 transition-colors text-xs">
+                  <tr
+                    key={call.id}
+                    style={{ borderBottom: '1px solid var(--border-subtle)', transition: 'background 0.15s' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-elevated)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <td style={{ padding: '16px 24px' }}>
+                      <Link href={`/calls/${call.id}`} style={{ textDecoration: 'none' }} className="block group">
+                        <p className="font-semibold text-white group-hover:text-emerald-400 transition-colors">
                           {call.caller_name || 'Anonymous Caller'}
                         </p>
-                        <p className="text-[11px] text-zinc-400 font-mono mt-0.5">{call.caller_phone || 'Direct line'}</p>
+                        <p className="font-mono mt-0.5" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          {call.caller_phone || 'Direct line'}
+                        </p>
                       </Link>
                     </td>
 
-                    <td className="py-4 px-6">
-                      <div>
-                        <p className="text-white font-medium text-xs">{biz?.name || 'General'}</p>
-                        <p className="text-[11px] text-zinc-400 truncate max-w-[240px] mt-0.5">{call.intent}</p>
-                      </div>
+                    <td style={{ padding: '16px 24px' }}>
+                      <p className="text-white font-medium">{biz?.name || 'General'}</p>
+                      <p className="truncate max-w-[220px] mt-0.5" style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                        {call.intent}
+                      </p>
                     </td>
 
-                    <td className="py-4 px-6">
+                    <td style={{ padding: '16px 24px' }}>
                       <span className={cn('badge', {
                         'badge-urgent': call.urgency === 'urgent',
                         'badge-new': call.urgency === 'normal',
@@ -344,7 +350,7 @@ export default function CallsPage() {
                       </span>
                     </td>
 
-                    <td className="py-4 px-6">
+                    <td style={{ padding: '16px 24px' }}>
                       <select
                         value={call.follow_up_status}
                         onChange={e => {
@@ -357,7 +363,16 @@ export default function CallsPage() {
                           }
                           updateStatus(call.id, statusMap[val], val)
                         }}
-                        className="bg-zinc-900 border border-zinc-800 rounded-lg text-xs py-1.5 px-3 text-white outline-none cursor-pointer hover:border-zinc-700"
+                        style={{
+                          background: 'var(--bg-inset)',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          padding: '6px 10px',
+                          color: '#ffffff',
+                          outline: 'none',
+                          cursor: 'pointer'
+                        }}
                       >
                         <option value="pending">Pending</option>
                         <option value="contacted">Contacted</option>
@@ -366,17 +381,18 @@ export default function CallsPage() {
                       </select>
                     </td>
 
-                    <td className="py-4 px-6 text-zinc-400 text-[11px]">
+                    <td style={{ padding: '16px 24px', fontSize: '11px' }}>
                       <p className="text-white font-medium">{formatRelativeTime(call.created_at)}</p>
-                      <p className="text-zinc-500 text-[10px] mt-0.5">{formatDate(call.created_at)}</p>
+                      <p style={{ color: 'var(--text-muted)', fontSize: '10px', marginTop: '2px' }}>{formatDate(call.created_at)}</p>
                     </td>
 
-                    <td className="py-4 px-6 text-right">
+                    <td style={{ padding: '16px 24px', textAlign: 'right' }}>
                       <Link
                         href={`/calls/${call.id}`}
-                        className="btn-secondary text-[11px] py-1.5 px-3 inline-flex items-center gap-1.5"
+                        className="btn-secondary"
+                        style={{ fontSize: '11px', padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                       >
-                        Details <ChevronRight size={13} />
+                        Details <ChevronRight size={12} />
                       </Link>
                     </td>
                   </tr>

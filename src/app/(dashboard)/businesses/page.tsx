@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Business, BUSINESS_TYPES } from '@/types'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
-import { Plus, Building2, Pencil, Trash2, Phone, Globe, ArrowRight } from 'lucide-react'
+import { Plus, Pencil, Trash2, Phone, ArrowRight } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 
 const SEED_BUSINESSES: Business[] = [
@@ -93,84 +93,85 @@ export default function BusinessesPage() {
   }
 
   return (
-    <div className="p-8 lg:p-10 max-w-7xl w-full mx-auto space-y-8">
+    <div className="page-container">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-zinc-800">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white font-display">Business Profiles</h1>
-          <p className="text-sm text-zinc-400 mt-1.5">
-            Manage your small business configurations and customize voice assistant handling.
+          <h1 className="page-title">Business Profiles</h1>
+          <p className="page-subtitle">
+            Manage your small business configurations and voice assistant settings.
           </p>
         </div>
-        <Link
-          href="/businesses/new"
-          id="add-business-btn"
-          className="btn-primary text-xs py-2.5 px-4 shadow-sm"
-        >
-          <Plus size={14} /> Add Business Profile
+        <Link href="/businesses/new" id="add-business-btn" className="btn-primary">
+          <Plus size={14} /> Add Business
         </Link>
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '22px' }}>
         {businesses.map(biz => {
           const typeInfo = BUSINESS_TYPES[biz.type] || BUSINESS_TYPES.other
           return (
             <div
               key={biz.id}
-              className="glass-card p-6 flex flex-col justify-between hover:border-zinc-700 transition-colors"
+              className="glass-card"
+              style={{ padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '230px' }}
             >
               <div>
-                <div className="flex items-start justify-between gap-3 mb-4">
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '12px' }}>
                   <div>
-                    <span className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider block mb-1">
+                    <span
+                      style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--green)', display: 'block', marginBottom: '4px' }}
+                    >
                       {typeInfo.label}
                     </span>
-                    <h3 className="font-bold text-base text-white tracking-tight">{biz.name}</h3>
+                    <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#ffffff' }}>{biz.name}</h3>
                   </div>
-
-                  <div className="flex items-center gap-1.5">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Link
                       href={`/businesses/${biz.id}`}
                       id={`edit-biz-${biz.id}`}
-                      className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-                      title="Edit Profile"
+                      style={{ padding: '6px', borderRadius: '6px', color: 'var(--text-muted)', display: 'inline-flex' }}
+                      title="Edit"
                     >
-                      <Pencil size={14} />
+                      <Pencil size={13} />
                     </Link>
                     <button
                       onClick={() => handleDelete(biz.id, biz.name)}
                       id={`delete-biz-${biz.id}`}
-                      className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                      title="Delete Profile"
+                      style={{ padding: '6px', borderRadius: '6px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex' }}
+                      title="Delete"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={13} />
                     </button>
                   </div>
                 </div>
-
-                <p className="text-xs text-zinc-400 leading-relaxed mb-6">
+                <p style={{ fontSize: '12px', lineHeight: 1.6, color: 'var(--text-secondary)' }}>
                   {biz.description || 'No description provided.'}
                 </p>
               </div>
 
-              <div className="pt-4 border-t border-zinc-800/80 space-y-2 text-xs text-zinc-400">
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <Phone size={13} className="text-zinc-500" />
-                    <span className="text-zinc-300 font-mono text-[11px]">{biz.phone || 'Direct line'}</span>
+              <div
+                style={{ paddingTop: '16px', marginTop: '16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '8px' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Phone size={12} style={{ color: 'var(--text-muted)' }} />
+                    <span style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      {biz.phone || 'No number set'}
+                    </span>
                   </span>
-                  <span className="text-zinc-400 text-[11px]">
-                    English
-                  </span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>English</span>
                 </div>
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-zinc-500 text-[11px]">Created {formatDate(biz.created_at)}</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    {formatDate(biz.created_at)}
+                  </span>
                   <Link
                     href={`/workflows/new?business_id=${biz.id}`}
-                    className="text-emerald-400 hover:text-emerald-300 font-semibold text-xs inline-flex items-center gap-1"
+                    style={{ fontSize: '12px', fontWeight: 600, color: 'var(--green)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                   >
-                    Configure Workflow <ArrowRight size={13} />
+                    Configure Workflow <ArrowRight size={12} />
                   </Link>
                 </div>
               </div>
@@ -178,19 +179,41 @@ export default function BusinessesPage() {
           )
         })}
 
-        {/* Add Business Tile */}
+        {/* Add New Card */}
         <Link
           href="/businesses/new"
-          className="glass-card p-8 flex flex-col items-center justify-center text-center border-dashed hover:border-emerald-500/50 hover:bg-zinc-950 transition-all min-h-[220px] group"
+          className="glass-card group"
+          style={{
+            padding: '32px 24px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            textAlign: 'center',
+            textDecoration: 'none',
+            borderStyle: 'dashed',
+            minHeight: '230px'
+          }}
         >
-          <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-emerald-400 group-hover:border-emerald-500/40 mb-3 transition-colors">
+          <div
+            style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: '12px',
+              background: 'var(--bg-inset)',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--text-muted)'
+            }}
+          >
             <Plus size={20} />
           </div>
-          <p className="text-sm font-semibold text-white group-hover:text-emerald-400 transition-colors">
-            Create Business Profile
-          </p>
-          <p className="text-xs text-zinc-500 mt-1 max-w-[220px] leading-relaxed">
-            Bakeries, Clinics, Logistics, Real Estate, or Repair Services.
+          <p style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff' }}>Add Business Profile</p>
+          <p style={{ fontSize: '12px', marginTop: '4px', color: 'var(--text-muted)', maxWidth: '200px', lineHeight: 1.5 }}>
+            Bakeries, Clinics, Logistics, Real Estate, or Repair Services
           </p>
         </Link>
       </div>
