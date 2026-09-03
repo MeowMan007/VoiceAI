@@ -225,7 +225,22 @@ const QUICK_SCENARIOS = [
   { label: 'Hindi — केक ऑर्डर', text: 'मुझे कल शाम तक 2 किलो चॉकलेट केक चाहिए, घर पर डिलीवरी करें' }
 ]
 
-const VAPI_KEY = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY || ''
+function getVapiConfig() {
+  if (typeof window === 'undefined') return { key: process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY || '', assistantId: process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID || '' }
+  let key = ''
+  let assistantId = ''
+  try {
+    const saved = localStorage.getItem('voiceai_business_settings')
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (parsed.vapiPublicKey) key = parsed.vapiPublicKey.trim()
+      if (parsed.vapiAssistantId) assistantId = parsed.vapiAssistantId.trim()
+    }
+  } catch { /* ignore */ }
+  if (!key) key = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY || ''
+  if (!assistantId) assistantId = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID || ''
+  return { key, assistantId }
+}
 
 function SimulatorContent() {
   const searchParams = useSearchParams()
@@ -246,6 +261,7 @@ function SimulatorContent() {
   const [vapiSpeaking, setVapiSpeaking] = useState(false)
   const [vapiLoading, setVapiLoading] = useState(false)
   const [volumeLevel, setVolumeLevel] = useState(0)
+  const [vapiKeyAvailable, setVapiKeyAvailable] = useState(false)
   const vapiRef = useRef<InstanceType<typeof import('@vapi-ai/web').default> | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -282,6 +298,12 @@ function SimulatorContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Read Vapi key from localStorage or env on mount
+  useEffect(() => {
+    const { key } = getVapiConfig()
+    setVapiKeyAvailable(!!key)
+  }, [])
+
   // Cleanup Vapi on unmount
   useEffect(() => {
     return () => {
@@ -292,15 +314,16 @@ function SimulatorContent() {
   }, [])
 
   const startVapiCall = useCallback(async () => {
-    if (!selectedWorkflow || !VAPI_KEY) {
-      toast.error('Vapi public key not configured in environment')
+    const { key: vapiKey, assistantId: vapiAssistantId } = getVapiConfig()
+    if (!selectedWorkflow || !vapiKey) {
+      toast.error('Vapi Public Key not configured. Go to Settings → Integrations to add it.')
       return
     }
     setVapiLoading(true)
 
     try {
       const { default: Vapi } = await import('@vapi-ai/web')
-      const vapi = new Vapi(VAPI_KEY)
+      const vapi = new Vapi(vapiKey)
       vapiRef.current = vapi
 
       vapi.on('call-start', () => {
@@ -374,10 +397,8 @@ function SimulatorContent() {
         toast.error(errMsg, { duration: 5000 })
       })
 
-      const assistantId = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID || ''
-
-      if (assistantId && assistantId !== VAPI_KEY) {
-        await (vapi.start as (assistant: string) => Promise<unknown>)(assistantId)
+      if (vapiAssistantId && vapiAssistantId !== vapiKey) {
+        await (vapi.start as (assistant: string) => Promise<unknown>)(vapiAssistantId)
       } else {
         await (vapi.start as (assistant: unknown) => Promise<unknown>)({
           name: `${bizName} Voice Assistant`,
@@ -805,7 +826,7 @@ function SimulatorContent() {
                   </button>
                   <button
                     onClick={startVapiCall}
-                    disabled={vapiLoading || !VAPI_KEY}
+                    disabled={vapiLoading}
                     className="btn-secondary"
                     style={{ justifyContent: 'center', gap: '8px', fontSize: '13px', padding: '10px' }}
                   >
@@ -814,9 +835,11 @@ function SimulatorContent() {
                       : <><Volume2 size={14} style={{ color: 'var(--green)' }} /> Start Live Voice Call (Vapi)</>
                     }
                   </button>
-                  {!VAPI_KEY && (
-                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center' }}>
-                      Add NEXT_PUBLIC_VAPI_PUBLIC_KEY to .env.local to enable voice calls
+                  {!vapiKeyAvailable && (
+                    <p style={{ fontSize: '11px', color: '#f59e0b', textAlign: 'center' }}>
+                      ⚠️ No Vapi key found. Go to{' '}
+                      <a href="/settings" style={{ color: 'var(--green)', textDecoration: 'underline' }}>Settings</a>{' '}
+                      → Integrations to add your Vapi Public Key.
                     </p>
                   )}
                 </div>

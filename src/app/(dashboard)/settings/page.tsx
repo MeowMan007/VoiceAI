@@ -17,6 +17,8 @@ interface BusinessSettings {
   dailyEmailDigest: boolean
   calendarSync: boolean
   deliveryApiSync: boolean
+  vapiPublicKey: string
+  vapiAssistantId: string
 }
 
 const DEFAULT_SETTINGS: BusinessSettings = {
@@ -28,7 +30,9 @@ const DEFAULT_SETTINGS: BusinessSettings = {
   urgentSmsAlerts: true,
   dailyEmailDigest: true,
   calendarSync: true,
-  deliveryApiSync: true
+  deliveryApiSync: true,
+  vapiPublicKey: '',
+  vapiAssistantId: ''
 }
 
 function SettingsContent() {
@@ -43,7 +47,8 @@ function SettingsContent() {
     try {
       const saved = localStorage.getItem('voiceai_business_settings')
       if (saved) {
-        setSettings(JSON.parse(saved))
+        const parsed = JSON.parse(saved)
+        setSettings({ ...DEFAULT_SETTINGS, ...parsed })
       }
     } catch {
       // ignore
@@ -341,6 +346,81 @@ function SettingsContent() {
             <div className="shrink-0">
               <span className="badge badge-completed">Active</span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Section 4.5: Vapi API Keys ─────────────────────── */}
+      <div className="settings-group">
+        <h2 className="settings-group-title">Vapi Voice API Keys</h2>
+        <div className="settings-section">
+          {/* Public Key */}
+          <div className="settings-row flex-col items-start gap-2">
+            <div className="flex items-start gap-3.5 w-full">
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
+                style={{ background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)' }}
+              >
+                <Volume2 size={15} style={{ color: 'var(--green)' }} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-medium text-white">Vapi Public Key</p>
+                <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                  Found in <a href="https://dashboard.vapi.ai" target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>dashboard.vapi.ai</a> → Org Settings → API Keys → <strong style={{color:'#fff'}}>Public Key</strong>. Starts with a UUID-like string.
+                </p>
+              </div>
+            </div>
+            <div className="w-full pl-[44px]">
+              <input
+                id="vapi-public-key"
+                type="text"
+                className="input-field text-xs py-2 font-mono w-full"
+                placeholder="e.g. 0194a3b1-..."
+                value={settings.vapiPublicKey}
+                onChange={e => setSettings({ ...settings, vapiPublicKey: e.target.value })}
+              />
+              {settings.vapiPublicKey.startsWith('AQ.') && (
+                <p className="text-[11px] mt-1" style={{ color: '#f59e0b' }}>
+                  ⚠️ This looks like a <strong>Private Key</strong> (starts with AQ.). The Public Key is different — it&apos;s a UUID found under API Keys in your Vapi dashboard.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Assistant ID (optional) */}
+          <div className="settings-row flex-col items-start gap-2">
+            <div className="flex items-start gap-3.5 w-full">
+              <div className="w-8 h-8 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-medium text-white">Vapi Assistant ID <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></p>
+                <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                  If you have a pre-built assistant in Vapi, paste its ID here. Leave blank to use the auto-generated assistant from your workflow settings.
+                </p>
+              </div>
+            </div>
+            <div className="w-full pl-[44px]">
+              <input
+                id="vapi-assistant-id"
+                type="text"
+                className="input-field text-xs py-2 font-mono w-full"
+                placeholder="e.g. 6d6477cf-18a1-473a-a2e1-29f51ffcad95"
+                value={settings.vapiAssistantId}
+                onChange={e => setSettings({ ...settings, vapiAssistantId: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="pl-[44px]">
+            <button
+              id="save-vapi-keys-btn"
+              onClick={() => {
+                localStorage.setItem('voiceai_business_settings', JSON.stringify(settings))
+                toast.success('Vapi keys saved — you can now start a live voice call in the Simulator')
+              }}
+              className="btn-primary text-xs py-2 px-4"
+            >
+              <Save size={13} /> Save Vapi Keys
+            </button>
           </div>
         </div>
       </div>
