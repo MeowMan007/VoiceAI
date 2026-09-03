@@ -345,18 +345,38 @@ function SimulatorContent() {
         }
       })
 
+      const bizName = (selectedWorkflow.business as { name: string })?.name || 'our business'
+      const greeting = selectedWorkflow.greeting.replace(/\[Business Name\]/g, bizName)
+      const lang = selectedWorkflow.language === 'hi' ? 'hi-IN' : 'en-US'
+      const isHindi = selectedWorkflow.language === 'hi'
+
       vapi.on('error', (err: unknown) => {
         console.error('Vapi error:', err)
         setVapiLoading(false)
-        const errMsg = (err as { message?: string; error?: { message?: string } })?.error?.message ||
-                       (err as { message?: string })?.message ||
-                       'Voice connection error. Please verify your Vapi Public Key.'
+        let errMsg = 'Voice connection error. Please verify your Vapi Public Key.'
+        if (typeof err === 'string') {
+          errMsg = err
+        } else if (err && typeof err === 'object') {
+          const errObj = err as Record<string, unknown>
+          if (typeof errObj.message === 'string') {
+            errMsg = errObj.message
+          } else if (errObj.error && typeof errObj.error === 'object') {
+            const nested = errObj.error as Record<string, unknown>
+            if (typeof nested.message === 'string') {
+              errMsg = nested.message
+            } else {
+              errMsg = JSON.stringify(nested)
+            }
+          } else {
+            errMsg = JSON.stringify(err)
+          }
+        }
         toast.error(errMsg, { duration: 5000 })
       })
 
       const assistantId = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID || ''
 
-      if (assistantId) {
+      if (assistantId && assistantId !== VAPI_KEY) {
         await (vapi.start as (assistant: string) => Promise<unknown>)(assistantId)
       } else {
         await (vapi.start as (assistant: unknown) => Promise<unknown>)({
@@ -390,7 +410,16 @@ function SimulatorContent() {
     } catch (err: unknown) {
       console.error('Failed to start Vapi call:', err)
       setVapiLoading(false)
-      const msg = (err as { message?: string })?.message || 'Could not connect voice call. Check your Vapi Public Key.'
+      let msg = 'Could not connect voice call. Check your Vapi Public Key.'
+      if (err instanceof Error) {
+        msg = err.message
+      } else if (typeof err === 'string') {
+        msg = err
+      } else if (err && typeof err === 'object') {
+        const anyErr = err as Record<string, unknown>
+        if (typeof anyErr.message === 'string') msg = anyErr.message
+        else msg = JSON.stringify(err)
+      }
       toast.error(msg, { duration: 5000 })
     }
   }, [selectedWorkflow])
