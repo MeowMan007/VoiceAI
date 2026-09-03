@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { demoAuth } from '@/lib/demo-auth'
+import { login } from '@/lib/demo-auth'
 import toast from 'react-hot-toast'
 import { Mic, Eye, EyeOff, Loader2 } from 'lucide-react'
 
@@ -13,16 +13,18 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    const { error } = demoAuth.login(email, password)
+    const { error } = login(email, password)
     if (error) {
       toast.error(error)
       setLoading(false)
-    } else {
-      router.push('/')
+      return
     }
+    toast.success('Welcome back!')
+    router.push('/')
+    router.refresh()
   }
 
   return (
@@ -101,12 +103,6 @@ export default function LoginPage() {
               </Link>
             </p>
           </div>
-        </div>
-
-        {/* Demo hint */}
-        <div className="mt-4 p-3 rounded-xl text-center text-xs" 
-          style={{ background: 'rgba(139,92,246,0.1)', color: 'var(--text-secondary)', border: '1px solid rgba(139,92,246,0.2)' }}>
-          🎭 Demo: register with any email to get started instantly
         </div>
       </div>
     </div>

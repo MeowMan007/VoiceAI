@@ -1,259 +1,183 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
-import { localDB } from '@/lib/local-db'
-import { Call, Business, CallStatus } from '@/types'
+import { useRouter } from 'next/navigation'
+import { getUser } from '@/lib/demo-auth'
+import { localDB, CallRecord, Business } from '@/lib/local-db'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
-import { PhoneCall, Search, Download, ChevronRight } from 'lucide-react'
-import { formatDate, formatRelativeTime, cn } from '@/lib/utils'
+import { PhoneCall, Search, ChevronRight } from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
 
 export default function CallsPage() {
-  const [calls, setCalls] = useState<(Call & { business: Business | null })[]>([])
+  const router = useRouter()
+  const [calls, setCalls] = useState<CallRecord[]>([])
+  const [businesses, setBusinesses] = useState<Business[]>([])
+  const [businessMap, setBusinessMap] = useState<Record<string, Business>>({})
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [selectedBusiness, setSelectedBusiness] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
-  const [selectedUrgency, setSelectedUrgency] = useState<string>('all')
-
-  const businesses = useMemo(() => localDB.getBusinesses(), [])
 
   useEffect(() => {
-    setCalls(localDB.getCallsWithBusiness())
-  }, [])
+    const user = getUser()
+    if (!user) { router.push('/login'); return }
 
-  const updateStatus = (id: string, newStatus: CallStatus, newFollowUp: Call['follow_up_status']) => {
-    localDB.updateCall(id, { status: newStatus, follow_up_status: newFollowUp })
-    toast.success(`Updated status to ${newFollowUp}`)
-    setCalls(prev => prev.map(c => c.id === id ? { ...c, status: newStatus, follow_up_status: newFollowUp } : c))
+    const allCalls = localDB.calls.list(user.id)
+    const allBiz = localDB.businesses.list(user.id)
+    const bmap: Record<string, Business> = {}
+    allBiz.forEach(b => { bmap[b.id] = b })
+
+    setCalls(allCalls)
+    setBusinesses(allBiz)
+    setBusinessMap(bmap)
+    setLoading(false)
+  }, [router])
+
+  const filtered = useMemo(() => {
+    return calls.filter(c => {
+      const biz = businessMap[c.businessId]
+      const matchSearch = !search ||
+        c.callerName?.toLowerCase().includes(search.toLowerCase()) ||
+        c.callerPhone?.includes(search) ||
+        c.summary?.toLowerCase().includes(search.toLowerCase()) ||
+        biz?.name.toLowerCase().includes(search.toLowerCase())
+      const matchBiz = selectedBusiness === 'all' || c.businessId === selectedBusiness
+      const matchStatus = selectedStatus === 'all' || c.status === selectedStatus
+      return matchSearch && matchBiz && matchStatus
+    })
+  }, [calls, search, selectedBusiness, selectedStatus, businessMap])
+
+  const handleDelete = (id: string) => {
+    if (!confirm('Delete this call record?')) return
+    localDB.calls.delete(id)
+    setCalls(prev => prev.filter(c => c.id !== id))
+    toast.success('Call record deleted')
   }
 
-
-  const filteredCalls = useMemo(() => {
-    return calls.filter(call => {
-      const matchesSearch =
-        (call.caller_name || '').toLowerCase().includes(search.toLowerCase()) ||
-        (call.caller_phone || '').toLowerCase().includes(search.toLowerCase()) ||
-        (call.summary || '').toLowerCase().includes(search.toLowerCase()) ||
-        (call.intent || '').toLowerCase().includes(search.toLowerCase())
-
-      const matchesBusiness = selectedBusiness === 'all' || call.business_id === selectedBusiness
-      const matchesStatus = selectedStatus === 'all' || call.follow_up_status === selectedStatus
-      const matchesUrgency = selectedUrgency === 'all' || call.urgency === selectedUrgency
-
-      return matchesSearch && matchesBusiness && matchesStatus && matchesUrgency
-    })
-  }, [calls, search, selectedBusiness, selectedStatus, selectedUrgency])
-
-  const exportCSV = () => {
-    const headers = ['Caller Name', 'Phone', 'Business', 'Intent', 'Urgency', 'Follow-up Status', 'Date', 'Summary']
-    const rows = filteredCalls.map(c => [
-      `"${c.caller_name || 'Anonymous'}"`,
-      `"${c.caller_phone || 'N/A'}"`,
-      `"${(c.business as { name?: string })?.name || 'General'}"`,
-      `"${c.intent || 'Enquiry'}"`,
-      `"${c.urgency || 'normal'}"`,
-      `"${c.follow_up_status || 'pending'}"`,
-      `"${formatDate(c.created_at)}"`,
-      `"${(c.summary || '').replace(/"/g, '""')}"`
-    ])
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n')
-    const encodedUri = encodeURI(csvContent)
-    const link = document.createElement('a')
-    link.setAttribute('href', encodedUri)
-    link.setAttribute('download', `customer_calls_${new Date().toISOString().slice(0, 10)}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    toast.success('Downloaded customer calls CSV')
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
   }
 
   return (
     <div className="page-container">
-      {/* Header */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">Customer Call Records</h1>
+          <h1 className="page-title">Call Records</h1>
           <p className="page-subtitle">
-            Review captured details, transcripts, Google Calendar bookings, and follow-ups.
+            All missed calls handled by your Voice AI assistant — with transcripts and summaries.
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-          <button type="button" onClick={exportCSV} className="btn-secondary">
-            <Download size={14} /> Export CSV
-          </button>
-          <Link href="/simulator" className="btn-primary">
-            <PhoneCall size={14} /> Simulate Call
-          </Link>
-        </div>
+        <span className="badge badge-completed">{calls.length} Total</span>
       </div>
 
-      {/* Filter Bar */}
-      <div
-        className="glass-card"
-        style={{
-          padding: '16px 20px',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '12px',
-          marginBottom: '24px'
-        }}
-      >
-        <div style={{ position: 'relative' }}>
+      {/* Filters */}
+      <div className="glass-card" style={{ padding: '16px 20px', marginBottom: '20px', display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
+        <div style={{ flex: 1, minWidth: '200px', position: 'relative' }}>
           <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
           <input
+            id="call-search"
             type="text"
             className="input-field"
-            style={{ paddingLeft: '34px' }}
-            placeholder="Search caller name, phone, intent..."
+            style={{ paddingLeft: '36px' }}
+            placeholder="Search caller name, phone, or summary..."
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
         </div>
 
-        <div>
-          <select
-            className="input-field"
-            value={selectedBusiness}
-            onChange={e => setSelectedBusiness(e.target.value)}
-          >
-            <option value="all">All Businesses</option>
-            {businesses.map(b => (
-              <option key={b.id} value={b.id}>{b.name}</option>
-            ))}
-          </select>
-        </div>
+        <select id="filter-business" className="input-field" style={{ width: 'auto' }} value={selectedBusiness} onChange={e => setSelectedBusiness(e.target.value)}>
+          <option value="all">All Businesses</option>
+          {businesses.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>
 
-        <div>
-          <select
-            className="input-field"
-            value={selectedUrgency}
-            onChange={e => setSelectedUrgency(e.target.value)}
-          >
-            <option value="all">All Priorities</option>
-            <option value="urgent">Urgent Priority</option>
-            <option value="normal">Normal Priority</option>
-            <option value="low">Low Priority</option>
-          </select>
-        </div>
-
-        <div>
-          <select
-            className="input-field"
-            value={selectedStatus}
-            onChange={e => setSelectedStatus(e.target.value)}
-          >
-            <option value="all">All Follow-up Statuses</option>
-            <option value="pending">Pending Callback</option>
-            <option value="contacted">Contacted</option>
-            <option value="resolved">Resolved</option>
-            <option value="closed">Closed</option>
-          </select>
-        </div>
+        <select id="filter-status" className="input-field" style={{ width: 'auto' }} value={selectedStatus} onChange={e => setSelectedStatus(e.target.value)}>
+          <option value="all">All Status</option>
+          <option value="completed">Completed</option>
+          <option value="missed">Missed</option>
+          <option value="in-progress">In Progress</option>
+        </select>
       </div>
 
-      {/* Call Table Card */}
+      {/* Calls List */}
       <div className="glass-card" style={{ overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="w-full text-left" style={{ fontSize: '12px', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
-                {['Caller', 'Business & Intent', 'Priority', 'Follow-up Status', 'Date & Time', ''].map((h, i) => (
-                  <th key={h} style={{ padding: '14px 24px', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', ...(i === 5 ? { textAlign: 'right' } : {}) }}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredCalls.map(call => {
-                const biz = call.business as { name: string; type: string } | null
-
-                return (
-                  <tr
-                    key={call.id}
-                    style={{ borderBottom: '1px solid var(--border-subtle)', transition: 'background 0.15s' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-elevated)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    <td style={{ padding: '16px 24px' }}>
-                      <Link href={`/calls/${call.id}`} style={{ textDecoration: 'none' }} className="block group">
-                        <p className="font-semibold text-white group-hover:text-emerald-400 transition-colors">
-                          {call.caller_name || 'Anonymous Caller'}
-                        </p>
-                        <p className="font-mono mt-0.5" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                          {call.caller_phone || 'Direct line'}
-                        </p>
-                      </Link>
-                    </td>
-
-                    <td style={{ padding: '16px 24px' }}>
-                      <p className="text-white font-medium">{biz?.name || 'General'}</p>
-                      <p className="truncate max-w-[220px] mt-0.5" style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                        {call.intent}
-                      </p>
-                    </td>
-
-                    <td style={{ padding: '16px 24px' }}>
-                      <span className={cn('badge', {
-                        'badge-urgent': call.urgency === 'urgent',
-                        'badge-new': call.urgency === 'normal',
-                        'badge-completed': call.urgency === 'low'
-                      })}>
-                        {call.urgency === 'urgent' ? 'Urgent' : call.urgency === 'normal' ? 'Normal' : 'Low'}
-                      </span>
-                    </td>
-
-                    <td style={{ padding: '16px 24px' }}>
-                      <select
-                        value={call.follow_up_status}
-                        onChange={e => {
-                          const val = e.target.value as Call['follow_up_status']
-                          const statusMap: Record<Call['follow_up_status'], CallStatus> = {
-                            pending: 'new',
-                            contacted: 'in_progress',
-                            resolved: 'completed',
-                            closed: 'closed'
-                          }
-                          updateStatus(call.id, statusMap[val], val)
-                        }}
-                        style={{
-                          background: 'var(--bg-inset)',
-                          border: '1px solid var(--border-subtle)',
-                          borderRadius: '8px',
-                          fontSize: '12px',
-                          padding: '6px 10px',
-                          color: '#ffffff',
-                          outline: 'none',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="contacted">Contacted</option>
-                        <option value="resolved">Resolved</option>
-                        <option value="closed">Closed</option>
-                      </select>
-                    </td>
-
-                    <td style={{ padding: '16px 24px', fontSize: '11px' }}>
-                      <p className="text-white font-medium">{formatRelativeTime(call.created_at)}</p>
-                      <p style={{ color: 'var(--text-muted)', fontSize: '10px', marginTop: '2px' }}>{formatDate(call.created_at)}</p>
-                    </td>
-
-                    <td style={{ padding: '16px 24px', textAlign: 'right' }}>
-                      <Link
-                        href={`/calls/${call.id}`}
-                        className="btn-secondary"
-                        style={{ fontSize: '11px', padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                      >
-                        Details <ChevronRight size={12} />
-                      </Link>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        {filtered.length === 0 ? (
+          <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+            <PhoneCall size={32} style={{ color: 'var(--text-muted)', margin: '0 auto 12px' }} />
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>No call records found.</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '4px' }}>
+              Run the Voice Simulator to generate call records.
+            </p>
+            <Link href="/simulator" className="btn-primary" style={{ marginTop: '16px', display: 'inline-flex' }}>
+              Open Voice Simulator
+            </Link>
+          </div>
+        ) : (
+          <div>
+            {/* Table header */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 1.5fr 1fr auto auto',
+              padding: '10px 20px', borderBottom: '1px solid var(--border-subtle)',
+              fontSize: '11px', fontWeight: 600, textTransform: 'uppercase',
+              letterSpacing: '0.06em', color: 'var(--text-muted)'
+            }}>
+              <span>Caller</span>
+              <span>Business</span>
+              <span>Status</span>
+              <span>Duration</span>
+              <span>Time</span>
+            </div>
+            {filtered.map(call => {
+              const biz = businessMap[call.businessId]
+              return (
+                <Link
+                  key={call.id}
+                  href={`/calls/${call.id}`}
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 1fr auto auto', padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)', textDecoration: 'none', alignItems: 'center', gap: '12px', transition: 'background 0.15s' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-elevated)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <div>
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>{call.callerName || 'Anonymous'}</p>
+                    <p style={{ fontSize: '11px', fontFamily: 'monospace', color: 'var(--text-muted)', marginTop: '2px' }}>{call.callerPhone || '—'}</p>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: '13px', fontWeight: 500, color: '#fff' }}>{biz?.name || 'Unknown'}</p>
+                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{call.summary?.slice(0, 50) || '—'}</p>
+                  </div>
+                  <div>
+                    <span className={cn('badge', {
+                      'badge-completed': call.status === 'completed',
+                      'badge-urgent': call.status === 'missed',
+                      'badge-pending': call.status === 'in-progress',
+                    })}>
+                      {call.status}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    {call.duration ? `${call.duration}s` : '—'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {formatRelativeTime(call.createdAt)}
+                    <ChevronRight size={12} />
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )

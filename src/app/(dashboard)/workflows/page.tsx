@@ -1,36 +1,47 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { localDB } from '@/lib/local-db'
-import { Workflow, Business, BUSINESS_TYPES, WORKFLOW_TEMPLATES } from '@/types'
+import { useRouter } from 'next/navigation'
+import { getUser } from '@/lib/demo-auth'
+import { localDB, Workflow, Business } from '@/lib/local-db'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
-import { Plus, GitBranch, Pencil, Trash2, Power, Calendar, Play } from 'lucide-react'
+import { Plus, GitBranch, Pencil, Trash2, Power, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function WorkflowsPage() {
-  const [workflows, setWorkflows] = useState<(Workflow & { business: Business | null })[]>([])
+  const router = useRouter()
+  const [workflows, setWorkflows] = useState<Workflow[]>([])
+  const [businessMap, setBusinessMap] = useState<Record<string, Business>>({})
+  const [userId, setUserId] = useState('')
 
-  const fetchWorkflows = () => {
-    setWorkflows(localDB.getWorkflowsWithBusiness())
+  const reload = (uid: string) => {
+    const wfs = localDB.workflows.list(uid)
+    const bizs = localDB.businesses.list(uid)
+    const bmap: Record<string, Business> = {}
+    bizs.forEach(b => { bmap[b.id] = b })
+    setWorkflows(wfs)
+    setBusinessMap(bmap)
   }
 
   useEffect(() => {
-    fetchWorkflows()
-  }, [])
+    const user = getUser()
+    if (!user) { router.push('/login'); return }
+    setUserId(user.id)
+    reload(user.id)
+  }, [router])
 
   const handleDelete = (id: string, name: string) => {
     if (!confirm(`Delete workflow "${name}"?`)) return
-    localDB.deleteWorkflow(id)
-    setWorkflows(prev => prev.filter(w => w.id !== id))
+    localDB.workflows.delete(id)
+    reload(userId)
     toast.success('Workflow deleted')
   }
 
   const toggleActive = (id: string, current: boolean) => {
-    localDB.updateWorkflow(id, { is_active: !current })
-    setWorkflows(prev => prev.map(w => w.id === id ? { ...w, is_active: !current } : w))
+    localDB.workflows.update(id, { isActive: !current })
+    reload(userId)
     toast.success(`Workflow ${!current ? 'activated' : 'paused'}`)
   }
-
 
   return (
     <div className="page-container">
@@ -49,9 +60,21 @@ export default function WorkflowsPage() {
 
       {/* Workflows List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {workflows.length === 0 && (
+          <div className="glass-card" style={{ padding: '48px 24px', textAlign: 'center' }}>
+            <GitBranch size={32} style={{ color: 'var(--text-muted)', margin: '0 auto 12px' }} />
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>No workflows yet.</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '4px' }}>
+              Create a workflow to configure how your AI handles missed calls.
+            </p>
+            <Link href="/workflows/new" className="btn-primary" style={{ marginTop: '16px', display: 'inline-flex' }}>
+              <Plus size={14} /> Create First Workflow
+            </Link>
+          </div>
+        )}
         {workflows.map(wf => {
-          const fieldCount = (wf.fields as unknown[])?.length || 0
-          const conditionCount = (wf.conditions as unknown[])?.length || 0
+          const biz = businessMap[wf.businessId]
+          const stepCount = wf.steps?.length || 0
 
           return (
             <div
@@ -63,23 +86,16 @@ export default function WorkflowsPage() {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: '20px',
-                opacity: wf.is_active ? 1 : 0.6
+                opacity: wf.isActive ? 1 : 0.6
               }}
             >
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', minWidth: 0 }}>
                 <div
                   style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '10px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background: 'var(--bg-inset)',
-                    border: '1px solid var(--border-subtle)',
-                    color: 'var(--green)',
-                    flexShrink: 0,
-                    marginTop: '2px'
+                    width: '40px', height: '40px', borderRadius: '10px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)',
+                    color: 'var(--green)', flexShrink: 0, marginTop: '2px'
                   }}
                 >
                   <GitBranch size={18} />
@@ -87,24 +103,14 @@ export default function WorkflowsPage() {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '4px' }}>
                     <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff' }}>{wf.name}</h3>
-                    <span className={cn('badge', wf.is_active ? 'badge-completed' : 'badge-closed')}>
-                      {wf.is_active ? 'Active' : 'Paused'}
+                    <span className={cn('badge', wf.isActive ? 'badge-completed' : 'badge-closed')}>
+                      {wf.isActive ? 'Active' : 'Paused'}
                     </span>
-                    {wf.language === 'hi' ? (
-                      <span className="badge badge-pending">Hindi (हिंदी)</span>
-                    ) : (
-                      <span className="badge badge-new">English</span>
-                    )}
-                    {wf.calendar_enabled && (
-                      <span className="badge badge-contacted" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        <Calendar size={10} /> Google Calendar
-                      </span>
-                    )}
                   </div>
 
                   <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    <span style={{ color: '#ffffff', fontWeight: 500 }}>{wf.business?.name}</span>
-                    &nbsp;&middot;&nbsp;Missed Call Trigger&nbsp;&middot;&nbsp;{fieldCount} collected fields&nbsp;&middot;&nbsp;{conditionCount} conditional rules
+                    <span style={{ color: '#ffffff', fontWeight: 500 }}>{biz?.name || 'Unknown Business'}</span>
+                    &nbsp;·&nbsp;{wf.useCase || 'Missed Call'}&nbsp;·&nbsp;{stepCount} steps
                   </p>
                 </div>
               </div>
@@ -120,18 +126,14 @@ export default function WorkflowsPage() {
                 </Link>
 
                 <button
-                  onClick={() => toggleActive(wf.id, wf.is_active)}
+                  onClick={() => toggleActive(wf.id, wf.isActive)}
                   style={{
-                    padding: '7px 10px',
-                    borderRadius: '8px',
-                    background: 'var(--bg-inset)',
-                    border: '1px solid var(--border-subtle)',
-                    color: wf.is_active ? 'var(--green)' : 'var(--text-muted)',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center'
+                    padding: '7px 10px', borderRadius: '8px',
+                    background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)',
+                    color: wf.isActive ? 'var(--green)' : 'var(--text-muted)',
+                    cursor: 'pointer', display: 'inline-flex', alignItems: 'center'
                   }}
-                  title={wf.is_active ? 'Pause Workflow' : 'Activate Workflow'}
+                  title={wf.isActive ? 'Pause Workflow' : 'Activate Workflow'}
                 >
                   <Power size={13} />
                 </button>
@@ -139,14 +141,9 @@ export default function WorkflowsPage() {
                 <Link
                   href={`/workflows/${wf.id}`}
                   style={{
-                    padding: '7px 10px',
-                    borderRadius: '8px',
-                    background: 'var(--bg-inset)',
-                    border: '1px solid var(--border-subtle)',
-                    color: 'var(--text-secondary)',
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center'
+                    padding: '7px 10px', borderRadius: '8px',
+                    background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)',
+                    color: 'var(--text-secondary)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center'
                   }}
                   title="Edit Workflow"
                 >
@@ -156,14 +153,9 @@ export default function WorkflowsPage() {
                 <button
                   onClick={() => handleDelete(wf.id, wf.name)}
                   style={{
-                    padding: '7px 10px',
-                    borderRadius: '8px',
-                    background: 'var(--bg-inset)',
-                    border: '1px solid var(--border-subtle)',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center'
+                    padding: '7px 10px', borderRadius: '8px',
+                    background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)',
+                    color: 'var(--text-muted)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center'
                   }}
                   title="Delete Workflow"
                 >

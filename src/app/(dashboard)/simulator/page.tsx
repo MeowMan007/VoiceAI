@@ -1,13 +1,13 @@
 'use client'
 import { useEffect, useRef, useState, Suspense, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { Workflow, SimulatorMessage, BUSINESS_TYPES, WORKFLOW_TEMPLATES, BusinessType } from '@/types'
+import { Workflow, SimulatorMessage } from '@/types'
 import { useSearchParams } from 'next/navigation'
+import { apiGet, apiSend } from '@/lib/api-client'
 import toast from 'react-hot-toast'
+import Link from 'next/link'
 import {
-  Send, Mic, RefreshCw, Save, Phone, PhoneOff,
-  Globe, Sparkles, Calendar, Volume2, CheckCircle2,
-  User, Bot
+  Send, Mic, Save, Phone, Sparkles, Calendar, Volume2,
+  CheckCircle2, User, Bot, VolumeX, PlusCircle
 } from 'lucide-react'
 import { v4 as uuidv4 } from 'uuid'
 import { cn } from '@/lib/utils'
@@ -15,209 +15,17 @@ import dynamic from 'next/dynamic'
 
 const ElevenLabsVoiceSimulator = dynamic(() => import('@/components/ElevenLabsVoiceSimulator'), { ssr: false })
 
-// Built-in demonstration workflows — English + Hindi
-const DEMO_WORKFLOWS: Workflow[] = [
-  {
-    id: 'demo-cake-en',
-    business_id: 'demo-biz-1',
-    name: 'Cake Order Intake (English)',
-    trigger: 'missed_call',
-    greeting: WORKFLOW_TEMPLATES.cake_shop.greeting!,
-    closing_message: WORKFLOW_TEMPLATES.cake_shop.closing_message!,
-    language: 'en',
-    fields: WORKFLOW_TEMPLATES.cake_shop.fields!,
-    conditions: WORKFLOW_TEMPLATES.cake_shop.conditions!,
-    post_action: 'create_record',
-    calendar_enabled: true,
-    is_active: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    business: {
-      id: 'demo-biz-1',
-      owner_id: 'demo',
-      name: 'Sweet Delights Bakery',
-      type: 'cake_shop',
-      phone: '+91 98765 43210',
-      description: 'Artisanal cake & pastry shop',
-      language: 'en',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  },
-  {
-    id: 'demo-cake-hi',
-    business_id: 'demo-biz-1',
-    name: 'Cake Order Intake (Hindi)',
-    trigger: 'missed_call',
-    greeting: 'नमस्ते! Sweet Delights Bakery में आपका स्वागत है। मुझे बताइए, क्या आप केक ऑर्डर करना चाहते हैं या कोई सामान्य प्रश्न है?',
-    closing_message: 'धन्यवाद! हमारी टीम जल्द ही आपसे संपर्क करेगी।',
-    language: 'hi',
-    fields: [
-      { id: '1', label: 'केक का प्रकार (Cake Type)', key: 'cake_type', type: 'text', required: true, order: 1 },
-      { id: '2', label: 'फ्लेवर (Flavour)', key: 'flavour', type: 'text', required: true, order: 2 },
-      { id: '3', label: 'वजन (Weight)', key: 'weight', type: 'text', required: true, order: 3 },
-      { id: '4', label: 'जरूरी तारीख (Required Date)', key: 'required_date', type: 'date', required: true, order: 4 },
-      { id: '5', label: 'डिलीवरी या पिकअप', key: 'delivery_type', type: 'select', required: true, options: ['डिलीवरी', 'पिकअप'], order: 5 }
-    ],
-    conditions: [
-      { id: '1', field: 'required_date', operator: 'less_than', value: '24', action: 'mark_urgent', action_label: '24 घंटे में जरूरी — अर्जेंट मार्क करें' }
-    ],
-    post_action: 'create_record',
-    calendar_enabled: false,
-    is_active: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    business: {
-      id: 'demo-biz-1',
-      owner_id: 'demo',
-      name: 'Sweet Delights Bakery',
-      type: 'cake_shop',
-      phone: '+91 98765 43210',
-      description: 'Artisanal cake & pastry shop',
-      language: 'hi',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  },
-  {
-    id: 'demo-clinic-en',
-    business_id: 'demo-biz-2',
-    name: 'Patient Appointment Booking (English)',
-    trigger: 'missed_call',
-    greeting: WORKFLOW_TEMPLATES.clinic.greeting!,
-    closing_message: WORKFLOW_TEMPLATES.clinic.closing_message!,
-    language: 'en',
-    fields: WORKFLOW_TEMPLATES.clinic.fields!,
-    conditions: WORKFLOW_TEMPLATES.clinic.conditions!,
-    post_action: 'create_record',
-    calendar_enabled: true,
-    is_active: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    business: {
-      id: 'demo-biz-2',
-      owner_id: 'demo',
-      name: 'Apex Family Clinic',
-      type: 'clinic',
-      phone: '+91 98111 22334',
-      description: 'Multi-speciality family clinic',
-      language: 'en',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  },
-  {
-    id: 'demo-clinic-hi',
-    business_id: 'demo-biz-2',
-    name: 'Patient Appointment Booking (Hindi)',
-    trigger: 'missed_call',
-    greeting: 'नमस्ते! आप Apex Family Clinic से बात कर रहे हैं। क्या आप डॉक्टर से अपॉइंटमेंट लेना चाहते हैं या कोई अन्य मदद चाहिए?',
-    closing_message: 'धन्यवाद! हमारी टीम आपसे जल्द संपर्क करके अपॉइंटमेंट की पुष्टि करेगी।',
-    language: 'hi',
-    fields: [
-      { id: '1', label: 'मरीज का नाम (Patient Name)', key: 'patient_name', type: 'text', required: true, order: 1 },
-      { id: '2', label: 'डॉक्टर की पसंद (Doctor Preference)', key: 'doctor_preference', type: 'text', required: false, order: 2 },
-      { id: '3', label: 'पसंदीदा तारीख (Preferred Date)', key: 'preferred_date', type: 'date', required: true, order: 3 },
-      { id: '4', label: 'पसंदीदा समय (Preferred Time)', key: 'preferred_time', type: 'time', required: true, order: 4 },
-      { id: '5', label: 'अपॉइंटमेंट कारण (Reason)', key: 'reason', type: 'text', required: false, order: 5 }
-    ],
-    conditions: [],
-    post_action: 'create_record',
-    calendar_enabled: true,
-    is_active: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    business: {
-      id: 'demo-biz-2',
-      owner_id: 'demo',
-      name: 'Apex Family Clinic',
-      type: 'clinic',
-      phone: '+91 98111 22334',
-      description: 'Multi-speciality family clinic',
-      language: 'hi',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  },
-  {
-    id: 'demo-delivery-en',
-    business_id: 'demo-biz-3',
-    name: 'Courier & Tracking (English)',
-    trigger: 'missed_call',
-    greeting: WORKFLOW_TEMPLATES.delivery.greeting!,
-    closing_message: WORKFLOW_TEMPLATES.delivery.closing_message!,
-    language: 'en',
-    fields: WORKFLOW_TEMPLATES.delivery.fields!,
-    conditions: WORKFLOW_TEMPLATES.delivery.conditions!,
-    post_action: 'create_record',
-    calendar_enabled: false,
-    is_active: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    business: {
-      id: 'demo-biz-3',
-      owner_id: 'demo',
-      name: 'SwiftGo Express Logistics',
-      type: 'delivery',
-      phone: '+91 99887 76655',
-      language: 'en',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  },
-  {
-    id: 'demo-realestate-en',
-    business_id: 'demo-biz-4',
-    name: 'Property Lead Qualification (English)',
-    trigger: 'missed_call',
-    greeting: WORKFLOW_TEMPLATES.real_estate.greeting!,
-    closing_message: WORKFLOW_TEMPLATES.real_estate.closing_message!,
-    language: 'en',
-    fields: WORKFLOW_TEMPLATES.real_estate.fields!,
-    conditions: WORKFLOW_TEMPLATES.real_estate.conditions!,
-    post_action: 'create_record',
-    calendar_enabled: true,
-    is_active: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    business: {
-      id: 'demo-biz-4',
-      owner_id: 'demo',
-      name: 'Prestige Property Realty',
-      type: 'real_estate',
-      phone: '+91 97654 32100',
-      language: 'en',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  },
-  {
-    id: 'demo-repair-en',
-    business_id: 'demo-biz-5',
-    name: 'Home Repair Service Request (English)',
-    trigger: 'missed_call',
-    greeting: WORKFLOW_TEMPLATES.repair.greeting!,
-    closing_message: WORKFLOW_TEMPLATES.repair.closing_message!,
-    language: 'en',
-    fields: WORKFLOW_TEMPLATES.repair.fields!,
-    conditions: WORKFLOW_TEMPLATES.repair.conditions!,
-    post_action: 'create_record',
-    calendar_enabled: false,
-    is_active: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    business: {
-      id: 'demo-biz-5',
-      owner_id: 'demo',
-      name: 'QuickFix Home Services',
-      type: 'repair',
-      phone: '+91 98001 12345',
-      language: 'en',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  }
-]
+type ChatResponse = {
+  message?: string
+  toolsUsed?: string[]
+  toolUsed?: string
+  collectedData?: Record<string, unknown>
+  calendarEventId?: string
+  calendarEventUrl?: string
+  usedFallback?: boolean
+  languageUsed?: 'en' | 'hi'
+  error?: string
+}
 
 const QUICK_SCENARIOS = [
   { label: 'Order Cake (Urgent, <24h)', text: 'I need a 1kg chocolate truffle cake urgently for tomorrow morning' },
@@ -228,37 +36,22 @@ const QUICK_SCENARIOS = [
   { label: 'Hindi — केक ऑर्डर', text: 'मुझे कल शाम तक 2 किलो चॉकलेट केक चाहिए, घर पर डिलीवरी करें' }
 ]
 
-function getVapiConfig() {
-  if (typeof window === 'undefined') return { key: process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY || '', assistantId: process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID || '' }
-  let key = ''
-  let assistantId = ''
-  try {
-    const saved = localStorage.getItem('voiceai_business_settings')
-    if (saved) {
-      const parsed = JSON.parse(saved)
-      if (parsed.vapiPublicKey) key = parsed.vapiPublicKey.trim()
-      if (parsed.vapiAssistantId) assistantId = parsed.vapiAssistantId.trim()
-    }
-  } catch { /* ignore */ }
-  if (!key) key = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY || ''
-  if (!assistantId) assistantId = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID || ''
-  return { key, assistantId }
-}
-
-import { localDB } from '@/lib/local-db'
-
 function SimulatorContent() {
   const searchParams = useSearchParams()
 
   const [workflows, setWorkflows] = useState<Workflow[]>([])
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null)
+  const [loadingWorkflows, setLoadingWorkflows] = useState(true)
   const [messages, setMessages] = useState<SimulatorMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [started, setStarted] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [collectedData, setCollectedData] = useState<Record<string, unknown>>({})
   const [toolLogs, setToolLogs] = useState<string[]>([])
+  const [calendarEvent, setCalendarEvent] = useState<{ id?: string; url?: string }>({})
+  const [ttsError, setTtsError] = useState<string | null>(null)
 
   // Voice vs Chat simulator mode — default to VOICE
   const [simulatorMode, setSimulatorMode] = useState<'voice' | 'chat'>('voice')
@@ -266,43 +59,66 @@ function SimulatorContent() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
+  // Load the owner's real workflows from Supabase (no demo/local data)
   useEffect(() => {
-    const localWfs = localDB.getWorkflowsWithBusiness()
-    const combined = (localWfs && localWfs.length > 0) ? (localWfs as unknown as Workflow[]) : DEMO_WORKFLOWS
-    setWorkflows(combined)
-
-    const wfId = searchParams.get('workflow')
-    if (wfId) {
-      const found = combined.find(w => w.id === wfId)
-      setSelectedWorkflow((found || combined[0]) as Workflow)
-    } else {
-      setSelectedWorkflow(combined[0] as Workflow)
-    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const wfs = await apiGet<Workflow[]>('/api/workflows')
+        if (cancelled) return
+        setWorkflows(wfs)
+        const wfId = searchParams.get('workflow')
+        const found = wfId ? wfs.find(w => w.id === wfId) : undefined
+        setSelectedWorkflow(found || wfs[0] || null)
+      } catch (err) {
+        if (!cancelled) toast.error(err instanceof Error ? err.message : 'Failed to load workflows')
+      } finally {
+        if (!cancelled) setLoadingWorkflows(false)
+      }
+    })()
+    return () => { cancelled = true }
   }, [searchParams])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Spoken audio playback helper
-  const speakAssistantText = useCallback((text: string, language?: string) => {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.lang = language === 'hi' ? 'hi-IN' : 'en-US'
-      utterance.rate = 1.02
-      utterance.pitch = 1.0
-      const voices = window.speechSynthesis.getVoices()
-      const preferredVoice = voices.find(v =>
-        language === 'hi'
-          ? (v.lang.includes('hi') || v.name.includes('Hindi'))
-          : (v.lang.includes('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha') || v.name.includes('David') || v.name.includes('Zira')))
-      )
-      if (preferredVoice) utterance.voice = preferredVoice
-      window.speechSynthesis.speak(utterance)
+  const stopAudio = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
     }
   }, [])
+
+  // Spoken playback via the real ElevenLabs TTS route — NO browser speech APIs (spec §2.6).
+  // On failure we surface a visible error state rather than silently substituting.
+  const speakViaTts = useCallback(async (text: string, language?: string) => {
+    stopAudio()
+    try {
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, language: language || 'en' }),
+      })
+      if (!res.ok) throw new Error('tts_unavailable')
+      const blob = await res.blob()
+      if (blob.size < 200) throw new Error('tts_empty')
+      const url = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      audioRef.current = audio
+      audio.onended = () => URL.revokeObjectURL(url)
+      audio.onerror = () => {
+        URL.revokeObjectURL(url)
+        setTtsError('Spoken audio failed to play. The transcript below stays in sync.')
+      }
+      await audio.play()
+      setTtsError(null)
+    } catch {
+      setTtsError('Spoken audio unavailable — set ELEVENLABS_API_KEY on the server to hear replies. The transcript below still updates in real time.')
+    }
+  }, [stopAudio])
 
   const startConversation = () => {
     if (!selectedWorkflow) { toast.error('Select a workflow first'); return }
@@ -310,13 +126,14 @@ function SimulatorContent() {
     setSaved(false)
     setCollectedData({})
     setToolLogs([])
+    setCalendarEvent({})
 
-    const bizName = (selectedWorkflow.business as { name: string })?.name || 'our business'
+    const bizName = selectedWorkflow.business?.name || 'our business'
     const greeting = selectedWorkflow.greeting.replace(/\[Business Name\]/g, bizName)
     setMessages([{ id: uuidv4(), role: 'assistant', content: greeting, timestamp: new Date() }])
 
     if (autoSpeak) {
-      speakAssistantText(greeting, selectedWorkflow.language)
+      speakViaTts(greeting, selectedWorkflow.language)
     }
   }
 
@@ -335,26 +152,20 @@ function SimulatorContent() {
         .filter(m => !m.isLoading)
         .map(m => ({ role: m.role, content: m.content }))
 
-      let aiConfig = undefined
-      try {
-        const saved = localStorage.getItem('voiceai_ai_config')
-        if (saved) aiConfig = JSON.parse(saved)
-      } catch { /* ignore */ }
-
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiMessages, workflow: selectedWorkflow, aiConfig })
+      // Server resolves the LLM provider from its own env keys; we only express a preference.
+      const data = await apiSend<ChatResponse>('/api/chat', 'POST', {
+        messages: apiMessages,
+        workflow: selectedWorkflow,
+        aiConfig: { provider: 'gemini' },
       })
-      const data = await res.json()
 
-      if (data.toolUsed) {
-        const name = data.toolUsed.replace(/_/g, ' ')
-        setToolLogs(prev => [...prev, `Tool executed: ${name}`])
-        toast.success(`Tool: ${name}`, { duration: 2500 })
+      if (data.toolsUsed?.length) {
+        data.toolsUsed.forEach(name => setToolLogs(prev => [...prev, `Tool executed: ${name.replace(/_/g, ' ')}`]))
+        const last = data.toolUsed?.replace(/_/g, ' ')
+        if (last) toast.success(`Tool: ${last}`, { duration: 2500 })
       }
 
-      const replyContent = data.message || data.error || 'Let me look into that for you.'
+      const replyContent = data.message || 'Let me look into that for you.'
       const assistantMsg: SimulatorMessage = {
         id: uuidv4(), role: 'assistant',
         content: replyContent,
@@ -362,24 +173,19 @@ function SimulatorContent() {
       }
       setMessages(prev => prev.filter(m => !m.isLoading).concat(assistantMsg))
 
-      // Auto speak response out loud!
       if (autoSpeak) {
-        speakAssistantText(replyContent, selectedWorkflow.language)
+        speakViaTts(replyContent, data.languageUsed || selectedWorkflow.language)
       }
 
-      // Extract fields from user message
-      const updatedFields: Record<string, unknown> = {}
-      if (selectedWorkflow.fields) {
-        (selectedWorkflow.fields as { key: string; label: string }[]).forEach(f => {
-          const lower = messageText.toLowerCase()
-          if (lower.includes(f.label.toLowerCase()) || lower.includes(f.key.toLowerCase())) {
-            updatedFields[f.key] = messageText
-          }
-        })
+      // Consume the orchestrator's structured tool output — the model reports what it captured
+      // via save_customer_data, so there is no client-side keyword guessing.
+      if (data.collectedData && Object.keys(data.collectedData).length) {
+        setCollectedData(prev => ({ ...prev, ...data.collectedData }))
       }
-      if (data.toolResult) Object.assign(updatedFields, data.toolResult)
-      setCollectedData(prev => ({ ...prev, ...updatedFields }))
-    } catch {
+      if (data.calendarEventId) {
+        setCalendarEvent({ id: data.calendarEventId, url: data.calendarEventUrl })
+      }
+    } catch (err) {
       const fallbackText = selectedWorkflow.language === 'hi'
         ? 'क्षमा करें, कुछ तकनीकी समस्या हुई। कृपया फिर से कहें।'
         : 'Sorry, a brief error occurred. Could you repeat that?'
@@ -388,53 +194,81 @@ function SimulatorContent() {
         content: fallbackText,
         timestamp: new Date()
       }))
-      if (autoSpeak) speakAssistantText(fallbackText, selectedWorkflow.language)
+      toast.error(err instanceof Error ? err.message : 'Request failed')
+      if (autoSpeak) speakViaTts(fallbackText, selectedWorkflow.language)
     }
     setLoading(false)
   }
 
+  // Persist the conversation as a real call record via PUT /api/chat.
+  // The server generates the summary, evaluates urgency conditions, and inserts under RLS.
   const saveConversation = async () => {
     if (!selectedWorkflow || messages.length < 2) { toast.error('Have a conversation first'); return }
+    setSaving(true)
     try {
-      const userMsg = messages.find(m => m.role === 'user')?.content || 'Customer Inquiry'
-      const callerName = (collectedData.caller_name as string) || (collectedData.patient_name as string) || 'Demo Caller'
-      const callerPhone = (collectedData.phone as string) || (collectedData.caller_phone as string) || '+91 98765 00000'
+      const transcript = messages
+        .filter(m => !m.isLoading)
+        .map(m => ({ role: m.role, content: m.content, timestamp: String(m.timestamp) }))
 
-      localDB.saveCall({
-        business_id: selectedWorkflow.business_id,
-        workflow_id: selectedWorkflow.id,
-        caller_name: callerName,
-        caller_phone: callerPhone,
-        status: 'completed',
-        intent: userMsg.slice(0, 50),
-        summary: `Customer called: "${userMsg.slice(0, 60)}". Collected: ${JSON.stringify(collectedData)}`,
-        urgency: 'normal',
-        follow_up_status: 'pending',
-        transcript: messages.filter(m => !m.isLoading).map(m => ({ role: m.role, content: m.content, timestamp: String(m.timestamp) })),
-        collected_data: collectedData as Record<string, string>,
-        language_used: selectedWorkflow.language || 'en'
+      await apiSend('/api/chat', 'PUT', {
+        transcript,
+        workflow: selectedWorkflow,
+        calledData: collectedData,
+        calendarEventId: calendarEvent.id,
+        calendarEventUrl: calendarEvent.url,
       })
 
       setSaved(true)
-      toast.success('Call recorded & saved to dashboard!')
-    } catch {
-      setSaved(true)
-      toast.success('Simulation saved')
+      toast.success('Call saved to your dashboard records')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save call record')
+    } finally {
+      setSaving(false)
     }
   }
 
   const resetConversation = () => {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-    }
+    stopAudio()
     setMessages([])
     setStarted(false)
     setSaved(false)
     setCollectedData({})
     setToolLogs([])
+    setCalendarEvent({})
+    setTtsError(null)
   }
 
   const isHindi = selectedWorkflow?.language === 'hi'
+
+  // Empty state — the simulator runs against real, owned workflows only.
+  if (!loadingWorkflows && workflows.length === 0) {
+    return (
+      <div className="page-container" style={{ maxWidth: '100%', padding: '24px 32px' }}>
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Voice AI Personal Assistant Simulator</h1>
+            <p className="page-subtitle">Simulate missed-call AI conversations with live voice, tool calling, and record capture.</p>
+          </div>
+        </div>
+        <div className="glass-card" style={{ padding: '48px 32px', textAlign: 'center', maxWidth: 520, margin: '48px auto' }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: '16px', margin: '0 auto 16px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)', color: 'var(--green)'
+          }}>
+            <PlusCircle size={26} />
+          </div>
+          <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#fff', marginBottom: '8px' }}>No workflows yet</h3>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '24px' }}>
+            Create a business and a missed-call workflow first — the simulator runs your real, saved workflows so every captured call lands in your dashboard.
+          </p>
+          <Link href="/workflows/new" className="btn-primary" style={{ display: 'inline-flex', gap: '8px' }}>
+            <PlusCircle size={15} /> Create a Workflow
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="page-container" style={{ maxWidth: '100%', padding: '24px 32px' }}>
@@ -486,8 +320,8 @@ function SimulatorContent() {
           </div>
 
           {messages.length > 1 && (
-            <button onClick={saveConversation} className="btn-primary" style={{ fontSize: '12px', padding: '8px 14px' }}>
-              <Save size={13} /> Save to Records
+            <button onClick={saveConversation} disabled={saving || saved} className="btn-primary" style={{ fontSize: '12px', padding: '8px 14px' }}>
+              <Save size={13} /> {saved ? 'Saved' : saving ? 'Saving…' : 'Save to Records'}
             </button>
           )}
         </div>
@@ -516,7 +350,7 @@ function SimulatorContent() {
             >
               {workflows.map(wf => (
                 <option key={wf.id} value={wf.id}>
-                  {(wf.business as { name: string })?.name} — {wf.name}
+                  {wf.business?.name ? `${wf.business.name} — ` : ''}{wf.name}
                 </option>
               ))}
             </select>
@@ -524,13 +358,13 @@ function SimulatorContent() {
             {selectedWorkflow && (
               <div style={{ marginTop: '10px', padding: '10px', borderRadius: '8px', background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)', fontSize: '11px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span style={{ fontWeight: 600, color: '#fff' }}>{(selectedWorkflow.business as { name: string })?.name}</span>
+                  <span style={{ fontWeight: 600, color: '#fff' }}>{selectedWorkflow.business?.name || 'Business'}</span>
                   <span className={cn('badge', isHindi ? 'badge-pending' : 'badge-new')} style={{ fontSize: '10px' }}>
                     {isHindi ? 'Hindi (हिंदी)' : 'English'}
                   </span>
                 </div>
                 <p style={{ color: 'var(--text-muted)' }}>
-                  Trigger: Missed Call &middot; {(selectedWorkflow.fields as unknown[])?.length || 0} fields to capture
+                  Trigger: Missed Call &middot; {selectedWorkflow.fields?.length || 0} fields to capture
                 </p>
                 {selectedWorkflow.calendar_enabled && (
                   <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--green)', fontSize: '10px', fontWeight: 600 }}>
@@ -552,7 +386,6 @@ function SimulatorContent() {
                   key={s.label}
                   onClick={() => {
                     if (simulatorMode === 'voice') {
-                      // Trigger spoken phrase in voice mode
                       sendMessage(s.text)
                     } else {
                       if (!started) {
@@ -583,13 +416,13 @@ function SimulatorContent() {
           </div>
 
           {/* Captured Fields */}
-          {selectedWorkflow?.fields && (
+          {selectedWorkflow?.fields && selectedWorkflow.fields.length > 0 && (
             <div className="glass-card" style={{ padding: '16px' }}>
               <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--green)', marginBottom: '8px' }}>
                 Captured Information
               </label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                {(selectedWorkflow.fields as { key: string; label: string; required: boolean }[]).map(field => {
+                {selectedWorkflow.fields.map(field => {
                   const has = field.key in collectedData
                   return (
                     <div key={field.key} style={{
@@ -608,6 +441,21 @@ function SimulatorContent() {
                   )
                 })}
               </div>
+            </div>
+          )}
+
+          {/* Calendar Tool Result */}
+          {calendarEvent.id && (
+            <div className="glass-card" style={{ padding: '16px', border: '1px solid rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.05)' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--green)', marginBottom: '8px' }}>
+                <Calendar size={11} /> Calendar Event Created
+              </label>
+              <p style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--text-muted)', wordBreak: 'break-all' }}>ID: {calendarEvent.id}</p>
+              {calendarEvent.url && (
+                <a href={calendarEvent.url} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: 'var(--green)', fontWeight: 600 }}>
+                  Open in Google Calendar →
+                </a>
+              )}
             </div>
           )}
 
@@ -639,10 +487,15 @@ function SimulatorContent() {
           {simulatorMode === 'voice' && selectedWorkflow && (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '20px', gap: '16px' }}>
               <ElevenLabsVoiceSimulator
+                key={selectedWorkflow.id}
                 workflow={selectedWorkflow}
                 messages={messages}
                 onMessage={msg => setMessages(prev => [...prev, msg])}
                 onToolLog={log => setToolLogs(prev => [...prev, log])}
+                onData={(collected, calendar) => {
+                  if (collected && Object.keys(collected).length) setCollectedData(prev => ({ ...prev, ...collected }))
+                  if (calendar?.id) setCalendarEvent(calendar)
+                }}
                 onEnd={() => {
                   toast.success('Voice call ended')
                 }}
@@ -688,18 +541,29 @@ function SimulatorContent() {
                   </span>
                 </div>
                 <button
-                  onClick={() => setAutoSpeak(!autoSpeak)}
+                  onClick={() => { if (autoSpeak) stopAudio(); setAutoSpeak(!autoSpeak) }}
                   style={{
                     fontSize: '11px', padding: '4px 10px', borderRadius: '6px',
                     background: autoSpeak ? 'rgba(16,185,129,0.15)' : 'var(--bg-inset)',
                     border: `1px solid ${autoSpeak ? 'var(--green)' : 'var(--border)'}`,
                     color: autoSpeak ? 'var(--green)' : 'var(--text-muted)',
-                    cursor: 'pointer'
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px'
                   }}
                 >
-                  {autoSpeak ? '🔊 Auto-Speak Audio: ON' : '🔇 Audio: OFF'}
+                  {autoSpeak ? <><Volume2 size={12} /> Auto-Speak: ON</> : <><VolumeX size={12} /> Audio: OFF</>}
                 </button>
               </div>
+
+              {/* TTS error banner — visible, never a silent fallback */}
+              {ttsError && (
+                <div style={{
+                  padding: '8px 20px', fontSize: '11px', color: '#fca5a5',
+                  background: 'rgba(239,68,68,0.08)', borderBottom: '1px solid rgba(239,68,68,0.2)',
+                  display: 'flex', alignItems: 'center', gap: '6px'
+                }}>
+                  <VolumeX size={12} /> {ttsError}
+                </div>
+              )}
 
               {/* Chat Messages */}
               <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -760,7 +624,7 @@ function SimulatorContent() {
                             </p>
                             {msg.role === 'assistant' && !msg.isLoading && (
                               <button
-                                onClick={() => speakAssistantText(msg.content, selectedWorkflow?.language)}
+                                onClick={() => speakViaTts(msg.content, selectedWorkflow?.language)}
                                 style={{ background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px' }}
                                 title="Listen to spoken audio"
                               >
@@ -815,7 +679,7 @@ function SimulatorContent() {
                     </button>
                   </div>
                   <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>
-                    {isHindi ? 'हिंदी और English दोनों में बात कर सकते हैं' : 'Try: "Book appointment tomorrow 4PM" or "Track order ORD-101"'} &nbsp;&middot;&nbsp; 🤖 Google Gemini Tool Calling
+                    {isHindi ? 'हिंदी और English दोनों में बात कर सकते हैं' : 'Try: "Book appointment tomorrow 4PM" or "Track order ORD-101"'} &nbsp;&middot;&nbsp; Model-native tool calling
                   </p>
                 </div>
               )}

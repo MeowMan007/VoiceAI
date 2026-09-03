@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { demoAuth } from '@/lib/demo-auth'
+import { signOut } from '@/lib/demo-auth'
 import { useState } from 'react'
 import {
   LayoutDashboard, Building2, GitBranch, PhoneCall,
@@ -24,7 +24,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [collapsed, setCollapsed] = useState(false)
 
   const handleLogout = () => {
-    demoAuth.signOut()
+    signOut()
     router.push('/login')
   }
 

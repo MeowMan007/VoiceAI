@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { demoAuth } from '@/lib/demo-auth'
+import { register } from '@/lib/demo-auth'
 import toast from 'react-hot-toast'
 import { Mic, Eye, EyeOff, Loader2 } from 'lucide-react'
 
@@ -13,17 +13,18 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    const { error } = demoAuth.register(email, password)
+    const { error } = register(email, password)
     if (error) {
       toast.error(error)
       setLoading(false)
-    } else {
-      toast.success('Account created! Welcome to VoiceAI 🎉')
-      router.push('/')
+      return
     }
+    toast.success('Account created! Welcome to VoiceAI.')
+    router.push('/')
+    router.refresh()
   }
 
   return (
@@ -73,6 +74,7 @@ export default function RegisterPage() {
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   required
+                  minLength={6}
                 />
                 <button type="button" onClick={() => setShowPass(!showPass)}
                   className="absolute right-3 top-1/2 -translate-y-1/2"

@@ -1,10 +1,8 @@
 -- Voice AI Personal Assistant - Database Schema
 -- Run this in the Supabase SQL editor
 
--- Enable UUID extension
 create extension if not exists "uuid-ossp";
 
--- Businesses table
 create table if not exists businesses (
   id uuid primary key default uuid_generate_v4(),
   owner_id uuid references auth.users(id) on delete cascade not null,
@@ -18,7 +16,6 @@ create table if not exists businesses (
   updated_at timestamptz default now()
 );
 
--- Workflows table
 create table if not exists workflows (
   id uuid primary key default uuid_generate_v4(),
   business_id uuid references businesses(id) on delete cascade not null,
@@ -36,7 +33,6 @@ create table if not exists workflows (
   updated_at timestamptz default now()
 );
 
--- Calls table (customer interactions)
 create table if not exists calls (
   id uuid primary key default uuid_generate_v4(),
   business_id uuid references businesses(id) on delete set null,
@@ -58,116 +54,161 @@ create table if not exists calls (
   updated_at timestamptz default now()
 );
 
--- Row Level Security
+create table if not exists integrations (
+  id uuid primary key default uuid_generate_v4(),
+  business_id uuid references businesses(id) on delete cascade not null,
+  provider text not null check (provider in ('google_calendar')),
+  access_token_encrypted text not null,
+  refresh_token_encrypted text,
+  token_expires_at timestamptz,
+  scope text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique (business_id, provider)
+);
+
 alter table businesses enable row level security;
 alter table workflows enable row level security;
 alter table calls enable row level security;
+alter table integrations enable row level security;
 
--- RLS Policies for businesses
+drop policy if exists "Users can view their own businesses" on businesses;
+drop policy if exists "Users can create their own businesses" on businesses;
+drop policy if exists "Users can update their own businesses" on businesses;
+drop policy if exists "Users can delete their own businesses" on businesses;
+
 create policy "Users can view their own businesses"
-  on businesses for select
+  on businesses for select to authenticated
   using (auth.uid() = owner_id);
 
 create policy "Users can create their own businesses"
-  on businesses for insert
+  on businesses for insert to authenticated
   with check (auth.uid() = owner_id);
 
 create policy "Users can update their own businesses"
-  on businesses for update
+  on businesses for update to authenticated
   using (auth.uid() = owner_id);
 
 create policy "Users can delete their own businesses"
-  on businesses for delete
+  on businesses for delete to authenticated
   using (auth.uid() = owner_id);
 
--- RLS Policies for workflows (through business ownership)
+create policy "service_role_full_access_businesses"
+  on businesses for all to service_role
+  using (true) with check (true);
+
+drop policy if exists "Users can view workflows of their businesses" on workflows;
+drop policy if exists "Users can create workflows for their businesses" on workflows;
+drop policy if exists "Users can update workflows of their businesses" on workflows;
+drop policy if exists "Users can delete workflows of their businesses" on workflows;
+
 create policy "Users can view workflows of their businesses"
-  on workflows for select
+  on workflows for select to authenticated
   using (
     exists (
-      select 1 from businesses 
-      where businesses.id = workflows.business_id 
+      select 1 from businesses
+      where businesses.id = workflows.business_id
       and businesses.owner_id = auth.uid()
     )
   );
 
 create policy "Users can create workflows for their businesses"
-  on workflows for insert
+  on workflows for insert to authenticated
   with check (
     exists (
-      select 1 from businesses 
-      where businesses.id = workflows.business_id 
+      select 1 from businesses
+      where businesses.id = workflows.business_id
       and businesses.owner_id = auth.uid()
     )
   );
 
 create policy "Users can update workflows of their businesses"
-  on workflows for update
+  on workflows for update to authenticated
   using (
     exists (
-      select 1 from businesses 
-      where businesses.id = workflows.business_id 
+      select 1 from businesses
+      where businesses.id = workflows.business_id
       and businesses.owner_id = auth.uid()
     )
   );
 
 create policy "Users can delete workflows of their businesses"
-  on workflows for delete
+  on workflows for delete to authenticated
   using (
     exists (
-      select 1 from businesses 
-      where businesses.id = workflows.business_id 
+      select 1 from businesses
+      where businesses.id = workflows.business_id
       and businesses.owner_id = auth.uid()
     )
   );
 
--- RLS Policies for calls
+create policy "service_role_full_access_workflows"
+  on workflows for all to service_role
+  using (true) with check (true);
+
+drop policy if exists "Users can view calls of their businesses" on calls;
+drop policy if exists "Users can insert calls for their businesses" on calls;
+drop policy if exists "Users can update calls of their businesses" on calls;
+drop policy if exists "Service role can do anything on calls" on calls;
+
 create policy "Users can view calls of their businesses"
-  on calls for select
+  on calls for select to authenticated
   using (
     exists (
-      select 1 from businesses 
-      where businesses.id = calls.business_id 
+      select 1 from businesses
+      where businesses.id = calls.business_id
       and businesses.owner_id = auth.uid()
     )
   );
 
 create policy "Users can insert calls for their businesses"
-  on calls for insert
+  on calls for insert to authenticated
   with check (
     exists (
-      select 1 from businesses 
-      where businesses.id = calls.business_id 
+      select 1 from businesses
+      where businesses.id = calls.business_id
       and businesses.owner_id = auth.uid()
     )
   );
 
 create policy "Users can update calls of their businesses"
-  on calls for update
+  on calls for update to authenticated
   using (
     exists (
-      select 1 from businesses 
-      where businesses.id = calls.business_id 
+      select 1 from businesses
+      where businesses.id = calls.business_id
       and businesses.owner_id = auth.uid()
     )
   );
 
--- Service role can bypass RLS for webhook insertions
--- (used by Vapi webhooks)
-create policy "Service role can do anything on calls"
-  on calls for all
-  using (true)
-  with check (true);
+create policy "service_role_full_access_calls"
+  on calls for all to service_role
+  using (true) with check (true);
 
--- Indexes for performance
+drop policy if exists "owners_manage_own_integrations" on integrations;
+drop policy if exists "service_role_full_access_integrations" on integrations;
+
+create policy "owners_manage_own_integrations"
+  on integrations for all to authenticated
+  using (
+    exists (select 1 from businesses where businesses.id = integrations.business_id and businesses.owner_id = auth.uid())
+  )
+  with check (
+    exists (select 1 from businesses where businesses.id = integrations.business_id and businesses.owner_id = auth.uid())
+  );
+
+create policy "service_role_full_access_integrations"
+  on integrations for all to service_role
+  using (true) with check (true);
+
 create index if not exists idx_businesses_owner_id on businesses(owner_id);
 create index if not exists idx_workflows_business_id on workflows(business_id);
 create index if not exists idx_calls_business_id on calls(business_id);
 create index if not exists idx_calls_created_at on calls(created_at desc);
 create index if not exists idx_calls_status on calls(status);
 create index if not exists idx_calls_urgency on calls(urgency);
+create index if not exists idx_integrations_business_id on integrations(business_id);
 
--- Updated_at trigger function
 create or replace function update_updated_at_column()
 returns trigger as $$
 begin
@@ -176,14 +217,22 @@ begin
 end;
 $$ language plpgsql;
 
+drop trigger if exists update_businesses_updated_at on businesses;
 create trigger update_businesses_updated_at
   before update on businesses
   for each row execute function update_updated_at_column();
 
+drop trigger if exists update_workflows_updated_at on workflows;
 create trigger update_workflows_updated_at
   before update on workflows
   for each row execute function update_updated_at_column();
 
+drop trigger if exists update_calls_updated_at on calls;
 create trigger update_calls_updated_at
   before update on calls
+  for each row execute function update_updated_at_column();
+
+drop trigger if exists update_integrations_updated_at on integrations;
+create trigger update_integrations_updated_at
+  before update on integrations
   for each row execute function update_updated_at_column();

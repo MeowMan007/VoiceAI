@@ -1,132 +1,113 @@
 /**
- * Demo Auth — localStorage-based authentication
- * Works without any external service (Supabase, Firebase, etc.)
- * All accounts and sessions are stored in the browser's localStorage.
+ * Demo Auth — zero-backend localStorage authentication.
+ * No Supabase project required. Works fully client-side.
  */
 
-const ACCOUNTS_KEY = 'voiceai_accounts'
-const SESSION_KEY = 'voiceai_session'
+const USERS_KEY = 'voiceai_demo_users'
+const SESSION_KEY = 'voiceai_demo_session'
 
 export interface DemoUser {
   id: string
   email: string
-  created_at: string
+  passwordHash: string
+  createdAt: string
 }
 
-interface AccountStore {
-  [email: string]: {
-    passwordHash: string
-    user: DemoUser
-  }
+export interface DemoSession {
+  userId: string
+  email: string
+  token: string
+  createdAt: string
 }
 
-interface Session {
-  user: DemoUser
-  expires_at: number
-}
-
-function simpleHash(str: string): string {
-  let hash = 5381
+function hashPassword(password: string): string {
+  // Simple deterministic hash for demo purposes (not cryptographic)
+  let hash = 0
+  const str = password + 'voiceai_salt_2024'
   for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) + hash) + str.charCodeAt(i)
+    const char = str.charCodeAt(i)
+    hash = (hash << 5) - hash + char
     hash = hash & hash
   }
   return hash.toString(36)
 }
 
-function loadAccounts(): AccountStore {
-  if (typeof window === 'undefined') return {}
+function getUsers(): DemoUser[] {
+  if (typeof window === 'undefined') return []
   try {
-    return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '{}')
+    return JSON.parse(localStorage.getItem(USERS_KEY) || '[]')
   } catch {
-    return {}
+    return []
   }
 }
 
-function saveAccounts(accounts: AccountStore) {
-  if (typeof window === 'undefined') return
-  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts))
+function saveUsers(users: DemoUser[]) {
+  localStorage.setItem(USERS_KEY, JSON.stringify(users))
 }
 
-function loadSession(): Session | null {
+export function register(email: string, password: string): { error?: string; user?: DemoUser } {
+  const users = getUsers()
+  if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
+    return { error: 'An account with this email already exists.' }
+  }
+  if (password.length < 6) {
+    return { error: 'Password must be at least 6 characters.' }
+  }
+  const user: DemoUser = {
+    id: 'usr_' + Math.random().toString(36).slice(2, 10),
+    email: email.toLowerCase(),
+    passwordHash: hashPassword(password),
+    createdAt: new Date().toISOString(),
+  }
+  users.push(user)
+  saveUsers(users)
+  createSession(user)
+  return { user }
+}
+
+export function login(email: string, password: string): { error?: string; user?: DemoUser } {
+  const users = getUsers()
+  const user = users.find(u => u.email.toLowerCase() === email.toLowerCase())
+  if (!user) {
+    return { error: 'No account found with this email.' }
+  }
+  if (user.passwordHash !== hashPassword(password)) {
+    return { error: 'Incorrect password.' }
+  }
+  createSession(user)
+  return { user }
+}
+
+export function createSession(user: DemoUser): DemoSession {
+  const session: DemoSession = {
+    userId: user.id,
+    email: user.email,
+    token: 'tok_' + Math.random().toString(36).slice(2, 18),
+    createdAt: new Date().toISOString(),
+  }
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+  return session
+}
+
+export function getSession(): DemoSession | null {
   if (typeof window === 'undefined') return null
   try {
     const raw = localStorage.getItem(SESSION_KEY)
-    if (!raw) return null
-    const session: Session = JSON.parse(raw)
-    if (Date.now() > session.expires_at) {
-      localStorage.removeItem(SESSION_KEY)
-      return null
-    }
-    return session
+    return raw ? JSON.parse(raw) : null
   } catch {
     return null
   }
 }
 
-function saveSession(user: DemoUser) {
-  if (typeof window === 'undefined') return
-  const session: Session = {
-    user,
-    expires_at: Date.now() + 1000 * 60 * 60 * 24 * 30,
-  }
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+export function getUser(): { email: string; id: string } | null {
+  const session = getSession()
+  return session ? { email: session.email, id: session.userId } : null
 }
 
-export const demoAuth = {
-  register(email: string, password: string): { error: string | null; user: DemoUser | null } {
-    const accounts = loadAccounts()
-    const key = email.toLowerCase().trim()
+export function signOut() {
+  localStorage.removeItem(SESSION_KEY)
+}
 
-    if (accounts[key]) {
-      return { error: 'An account with this email already exists. Please sign in instead.', user: null }
-    }
-
-    if (password.length < 6) {
-      return { error: 'Password must be at least 6 characters.', user: null }
-    }
-
-    const user: DemoUser = {
-      id: `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      email: key,
-      created_at: new Date().toISOString(),
-    }
-
-    accounts[key] = { passwordHash: simpleHash(password), user }
-    saveAccounts(accounts)
-    saveSession(user)
-
-    return { error: null, user }
-  },
-
-  login(email: string, password: string): { error: string | null; user: DemoUser | null } {
-    const accounts = loadAccounts()
-    const key = email.toLowerCase().trim()
-    const account = accounts[key]
-
-    if (!account) {
-      return { error: 'No account found with this email. Please register first.', user: null }
-    }
-
-    if (account.passwordHash !== simpleHash(password)) {
-      return { error: 'Incorrect password. Please try again.', user: null }
-    }
-
-    saveSession(account.user)
-    return { error: null, user: account.user }
-  },
-
-  getUser(): DemoUser | null {
-    return loadSession()?.user || null
-  },
-
-  signOut() {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(SESSION_KEY)
-    }
-  },
-
-  isAuthenticated(): boolean {
-    return !!loadSession()
-  },
+export function isLoggedIn(): boolean {
+  return getSession() !== null
 }

@@ -1,7 +1,7 @@
 'use client'
 import { useRef, useState, useCallback, useEffect } from 'react'
 import toast from 'react-hot-toast'
-import { Mic, MicOff, Volume2, PhoneOff, Loader2, Sparkles, Phone, PhoneCall } from 'lucide-react'
+import { Mic, MicOff, Volume2, PhoneOff, Loader2, Sparkles, PhoneCall, AlertTriangle } from 'lucide-react'
 import { Workflow, SimulatorMessage } from '@/types'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -10,6 +10,7 @@ interface Props {
   onMessage: (msg: SimulatorMessage) => void
   onEnd: () => void
   onToolLog: (log: string) => void
+  onData?: (collected: Record<string, unknown>, calendar?: { id?: string; url?: string }) => void
   messages: SimulatorMessage[]
 }
 
@@ -20,6 +21,7 @@ export default function ElevenLabsVoiceSimulator({
   onMessage,
   onEnd,
   onToolLog,
+  onData,
   messages,
 }: Props) {
   const [state, setState] = useState<ConnectionState>('idle')
@@ -27,6 +29,7 @@ export default function ElevenLabsVoiceSimulator({
   const [micMuted, setMicMuted] = useState(false)
   const [activeTool, setActiveTool] = useState<string | null>(null)
   const [callDuration, setCallDuration] = useState(0)
+  const [voiceError, setVoiceError] = useState<string | null>(null)
 
   const deepgramWsRef = useRef<WebSocket | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -35,6 +38,7 @@ export default function ElevenLabsVoiceSimulator({
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const isStartedRef = useRef(false)
+  const sttReadyRef = useRef(false)
 
   // Call duration timer
   useEffect(() => {
@@ -52,95 +56,46 @@ export default function ElevenLabsVoiceSimulator({
     return `${String(mins).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   }
 
-  function getSavedVoiceKeys() {
-    if (typeof window === 'undefined') return {}
-    try {
-      const raw = localStorage.getItem('voiceai_business_settings')
-      if (!raw) return {}
-      return JSON.parse(raw) as {
-        deepgramApiKey?: string
-        elevenlabsApiKey?: string
-      }
-    } catch {
-      return {}
-    }
-  }
+  // After the assistant finishes speaking, return to listening only if live STT is actually
+  // connected; otherwise stay in the visible error state so the orb never lies about the mic.
+  const settleAfterSpeak = useCallback(() => {
+    setState(sttReadyRef.current ? 'listening' : 'error')
+  }, [])
 
-  // Play natural browser speech synthesis
-  const playSpeechSynthesis = useCallback((text: string) => {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.lang = workflow.language === 'hi' ? 'hi-IN' : 'en-US'
-      utterance.rate = 1.02
-      utterance.pitch = 1.0
-
-      const voices = window.speechSynthesis.getVoices()
-      const preferredVoice = voices.find(v =>
-        workflow.language === 'hi'
-          ? (v.lang.includes('hi') || v.name.includes('Hindi'))
-          : (v.lang.includes('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha') || v.name.includes('Zira') || v.name.includes('David')))
-      )
-      if (preferredVoice) utterance.voice = preferredVoice
-
-      utterance.onstart = () => {
-        setState('speaking')
-      }
-      utterance.onend = () => {
-        setState('listening')
-      }
-      utterance.onerror = () => {
-        setState('listening')
-      }
-      window.speechSynthesis.speak(utterance)
-    } else {
-      setState('listening')
-    }
-  }, [workflow.language])
-
-  // Play TTS audio for assistant message (ElevenLabs + WebSpeech fallback)
+  // Play the assistant reply through the real ElevenLabs TTS route. On any failure we surface a
+  // visible error state — we NEVER fall back to browser speechSynthesis (spec §2.6).
   const speakText = useCallback(async (text: string) => {
     setState('speaking')
-    let played = false
-
     try {
-      const keys = getSavedVoiceKeys()
       const response = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text,
-          language: workflow.language,
-          apiKey: keys.elevenlabsApiKey,
-        }),
+        body: JSON.stringify({ text, language: workflow.language }),
       })
 
-      if (response.ok) {
-        const blob = await response.blob()
-        if (blob.size > 200) {
-          const url = URL.createObjectURL(blob)
-          const audio = new Audio(url)
-          audioRef.current = audio
+      if (!response.ok) throw new Error('tts_unavailable')
+      const blob = await response.blob()
+      if (blob.size <= 200) throw new Error('tts_empty')
 
-          audio.onended = () => {
-            URL.revokeObjectURL(url)
-            setState('listening')
-          }
-          audio.onerror = () => {
-            playSpeechSynthesis(text)
-          }
-          await audio.play()
-          played = true
-        }
+      const url = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      audioRef.current = audio
+      audio.onended = () => {
+        URL.revokeObjectURL(url)
+        settleAfterSpeak()
       }
+      audio.onerror = () => {
+        URL.revokeObjectURL(url)
+        setVoiceError('Spoken audio failed to play in this browser. The transcript below stays in sync.')
+        settleAfterSpeak()
+      }
+      await audio.play()
+      setVoiceError(null)
     } catch {
-      // Fallback
+      setVoiceError('Spoken audio unavailable — set ELEVENLABS_API_KEY on the server to hear the assistant. The live transcript still updates.')
+      settleAfterSpeak()
     }
-
-    if (!played) {
-      playSpeechSynthesis(text)
-    }
-  }, [workflow.language, playSpeechSynthesis])
+  }, [workflow.language, settleAfterSpeak])
 
   // Send accumulated transcript to /api/chat and speak the response
   const sendToChat = useCallback(async (userText: string) => {
@@ -156,11 +111,7 @@ export default function ElevenLabsVoiceSimulator({
     onMessage(userMsg)
 
     try {
-      const bizName = (workflow.business as { name?: string })?.name || 'our business'
-      const calendarToken = typeof window !== 'undefined'
-        ? localStorage.getItem('voiceai_google_token') || undefined
-        : undefined
-
+      const bizName = workflow.business?.name || 'our business'
       const chatMessages = [
         ...messages.map(m => ({ role: m.role, content: m.content })),
         { role: 'user', content: userText.trim() },
@@ -169,27 +120,36 @@ export default function ElevenLabsVoiceSimulator({
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           messages: chatMessages,
-          workflow: { ...workflow, business: { name: bizName } },
-          calendarAccessToken: calendarToken,
+          workflow: { ...workflow, business: { ...(workflow.business || {}), name: bizName } },
           aiConfig: { provider: 'gemini' },
         }),
       })
 
+      if (!response.ok) throw new Error(`chat_${response.status}`)
       const data = await response.json()
-      const assistantText: string = data.message || "I have recorded your request. Is there anything else you need?"
+      const assistantText: string = data.message || 'I have recorded your request. Is there anything else you need?'
 
-      if (data.toolUsed) {
-        const toolLabel = data.toolUsed === 'create_calendar_event'
+      if (data.toolsUsed?.length) {
+        const last: string = data.toolUsed || ''
+        const toolLabel = last === 'create_calendar_event'
           ? '📅 Google Calendar: Appointment Booked'
-          : data.toolUsed === 'lookup_delivery_status'
+          : last === 'lookup_delivery_status'
           ? '📦 Delivery API: Package Status Checked'
-          : `⚡ Tool Executed: ${data.toolUsed}`
+          : `⚡ Tool Executed: ${last.replace(/_/g, ' ')}`
         setActiveTool(toolLabel)
         onToolLog(toolLabel)
         setTimeout(() => setActiveTool(null), 6000)
       }
+
+      // Propagate the orchestrator's structured capture + calendar result to the parent so a
+      // voice-mode conversation can be saved with the same fidelity as chat mode.
+      onData?.(
+        (data.collectedData as Record<string, unknown>) || {},
+        data.calendarEventId ? { id: data.calendarEventId, url: data.calendarEventUrl } : undefined
+      )
 
       const assistantMsg: SimulatorMessage = {
         id: uuidv4(),
@@ -200,140 +160,104 @@ export default function ElevenLabsVoiceSimulator({
       onMessage(assistantMsg)
       await speakText(assistantText)
     } catch {
-      setState('listening')
+      settleAfterSpeak()
       toast.error('AI response error')
     }
-  }, [messages, workflow, onMessage, onToolLog, speakText])
+  }, [messages, workflow, onMessage, onToolLog, onData, speakText, settleAfterSpeak])
 
-  // Fallback to browser SpeechRecognition
-  const startWebSpeechFallback = useCallback(() => {
-    if (typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-      const rec = new SpeechRec()
-      rec.continuous = true
-      rec.interimResults = true
-      rec.lang = workflow.language === 'hi' ? 'hi-IN' : 'en-US'
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      rec.onresult = (event: any) => {
-        if (micMuted) return
-        let interim = ''
-        let final = ''
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            final += event.results[i][0].transcript
-          } else {
-            interim += event.results[i][0].transcript
-          }
-        }
-        if (interim) setTranscript(interim)
-        if (final.trim()) {
-          setTranscript('')
-          sendToChat(final.trim())
-        }
-      }
-
-      rec.onstart = () => {
-        setState('listening')
-      }
-      rec.onerror = () => {
-        setState('listening')
-      }
-      rec.onend = () => {
-        if (isStartedRef.current && state !== 'speaking' && state !== 'thinking') {
-          try { rec.start() } catch { /* ignore */ }
-        }
-      }
-      try { rec.start() } catch { /* ignore */ }
-    } else {
-      setState('listening')
-    }
-  }, [workflow.language, sendToChat, micMuted, state])
-
-  // Connect to Deepgram or browser WebSpeech for STT
+  // Connect to Deepgram for real-time STT. If the mic is blocked or no Deepgram key is
+  // configured, we surface a visible error and rely on the tap-to-speak buttons — there is
+  // no browser SpeechRecognition fallback (spec §2.6).
   const connectDeepgram = useCallback(async () => {
+    let stream: MediaStream
     try {
       setState('connecting')
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
       streamRef.current = stream
+    } catch (err) {
+      const denied = (err as Error).name === 'NotAllowedError'
+      setVoiceError(
+        denied
+          ? 'Microphone access was denied. Use the tap-to-speak buttons below to continue the demo.'
+          : 'No microphone is available. Use the tap-to-speak buttons below to continue the demo.'
+      )
+      setState('error')
+      return
+    }
 
-      const keys = getSavedVoiceKeys()
-      const tokenUrl = keys.deepgramApiKey
-        ? `/api/deepgram-token?key=${encodeURIComponent(keys.deepgramApiKey)}`
-        : '/api/deepgram-token'
+    let dgKey = ''
+    try {
+      const tokenRes = await fetch('/api/deepgram-token')
+      if (tokenRes.ok) {
+        const json = await tokenRes.json()
+        dgKey = json.key || ''
+      }
+    } catch {
+      /* handled below */
+    }
 
-      let dgKey = ''
+    if (!dgKey || dgKey.startsWith('your_')) {
+      // Release the mic we opened — we can't stream anywhere without a transcription key.
+      stream.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+      setVoiceError('Live transcription unavailable — set DEEPGRAM_API_KEY on the server. Use the tap-to-speak buttons below.')
+      setState('error')
+      return
+    }
+
+    const lang = workflow.language === 'hi' ? 'hi' : 'en-US'
+    const ws = new WebSocket(
+      `wss://api.deepgram.com/v1/listen?language=${lang}&model=nova-2&interim_results=true&endpointing=600`,
+      ['token', dgKey]
+    )
+    deepgramWsRef.current = ws
+
+    ws.onopen = () => {
+      sttReadyRef.current = true
+      setVoiceError(null)
+      setState('listening')
+      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+      mediaRecorderRef.current = recorder
+
+      recorder.ondataavailable = (e) => {
+        if (ws.readyState === WebSocket.OPEN && e.data.size > 0 && !micMuted) {
+          ws.send(e.data)
+        }
+      }
+      recorder.start(250)
+    }
+
+    ws.onmessage = (event) => {
       try {
-        const tokenRes = await fetch(tokenUrl)
-        if (tokenRes.ok) {
-          const json = await tokenRes.json()
-          dgKey = json.key
+        const data = JSON.parse(event.data)
+        const alt = data?.channel?.alternatives?.[0]
+        if (!alt) return
+
+        const text: string = alt.transcript || ''
+        const isFinal: boolean = data.is_final
+
+        if (text && !micMuted) setTranscript(text)
+
+        if (isFinal && text.trim() && !micMuted) {
+          if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
+          silenceTimerRef.current = setTimeout(() => {
+            setTranscript('')
+            sendToChat(text)
+          }, 600)
         }
       } catch { /* ignore */ }
-
-      if (dgKey && !dgKey.startsWith('your_')) {
-        const lang = workflow.language === 'hi' ? 'hi' : 'en-US'
-        const ws = new WebSocket(
-          `wss://api.deepgram.com/v1/listen?language=${lang}&model=nova-2&interim_results=true&endpointing=600`,
-          ['token', dgKey]
-        )
-        deepgramWsRef.current = ws
-
-        ws.onopen = () => {
-          setState('listening')
-          const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
-          mediaRecorderRef.current = recorder
-
-          recorder.ondataavailable = (e) => {
-            if (ws.readyState === WebSocket.OPEN && e.data.size > 0 && !micMuted) {
-              ws.send(e.data)
-            }
-          }
-          recorder.start(250)
-        }
-
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data)
-            const alt = data?.channel?.alternatives?.[0]
-            if (!alt) return
-
-            const text: string = alt.transcript || ''
-            const isFinal: boolean = data.is_final
-
-            if (text && !micMuted) setTranscript(text)
-
-            if (isFinal && text.trim() && !micMuted) {
-              if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
-              silenceTimerRef.current = setTimeout(() => {
-                setTranscript('')
-                sendToChat(text)
-              }, 600)
-            }
-          } catch { /* ignore */ }
-        }
-
-        ws.onerror = () => {
-          startWebSpeechFallback()
-        }
-      } else {
-        startWebSpeechFallback()
-      }
-    } catch (err) {
-      if ((err as Error).name === 'NotAllowedError') {
-        toast.error('Microphone access denied. You can speak using the Quick Buttons below!')
-      }
-      startWebSpeechFallback()
     }
-  }, [workflow.language, sendToChat, micMuted, startWebSpeechFallback])
+
+    ws.onerror = () => {
+      sttReadyRef.current = false
+      setVoiceError('Live transcription connection failed. Use the tap-to-speak buttons below.')
+      setState('error')
+    }
+  }, [workflow.language, sendToChat, micMuted])
 
   const stopSession = useCallback(() => {
     if (callTimerRef.current) clearInterval(callTimerRef.current)
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-    }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop()
     }
@@ -349,6 +273,7 @@ export default function ElevenLabsVoiceSimulator({
       audioRef.current.pause()
       audioRef.current = null
     }
+    sttReadyRef.current = false
     setState('idle')
     onEnd()
   }, [onEnd])
@@ -358,7 +283,7 @@ export default function ElevenLabsVoiceSimulator({
     if (isStartedRef.current) return
     isStartedRef.current = true
 
-    const bizName = (workflow.business as { name?: string })?.name || 'our business'
+    const bizName = workflow.business?.name || 'our business'
     const greeting = workflow.greeting.replace(/\[Business Name\]/g, bizName)
 
     const assistantMsg: SimulatorMessage = {
@@ -385,7 +310,7 @@ export default function ElevenLabsVoiceSimulator({
     listening: '🎙️ Listening to you (Speak now)',
     thinking: '🤖 AI Reasoning & Tool Calling…',
     speaking: '🔊 Assistant Speaking Out Loud…',
-    error: 'Call Error',
+    error: '⚠️ Voice limited — tap to speak below',
   }
 
   const stateColor: Record<ConnectionState, string> = {
@@ -424,7 +349,7 @@ export default function ElevenLabsVoiceSimulator({
           </div>
           <div>
             <p style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>
-              {(workflow.business as { name?: string })?.name || 'Voice AI Assistant'}
+              {workflow.business?.name || 'Voice AI Assistant'}
             </p>
             <p style={{ fontSize: '11px', color: 'var(--green)', fontFamily: 'monospace' }}>
               ● LIVE CALL IN PROGRESS &middot; {formatDuration(callDuration)}
@@ -449,6 +374,22 @@ export default function ElevenLabsVoiceSimulator({
           </span>
         </div>
       </div>
+
+      {/* Visible Voice Error Banner (no silent browser-speech substitution) */}
+      {voiceError && (
+        <div style={{
+          width: '100%',
+          padding: '10px 16px',
+          borderRadius: '12px',
+          background: 'rgba(239,68,68,0.1)',
+          border: '1px solid rgba(239,68,68,0.35)',
+          display: 'flex', alignItems: 'center', gap: '8px',
+          color: '#fca5a5', fontSize: '12px', fontWeight: 500,
+        }}>
+          <AlertTriangle size={14} style={{ flexShrink: 0 }} />
+          <span>{voiceError}</span>
+        </div>
+      )}
 
       {/* Tool Call Notification Banner */}
       {activeTool && (
@@ -521,7 +462,7 @@ export default function ElevenLabsVoiceSimulator({
         </div>
       </div>
 
-      {/* Audio Waveform Visualizer Bars (Simulated audio activity) */}
+      {/* Audio Waveform Visualizer Bars */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '24px' }}>
         {[12, 24, 18, 28, 16, 26, 14, 22, 10, 20, 15].map((h, i) => (
           <div
@@ -553,12 +494,14 @@ export default function ElevenLabsVoiceSimulator({
               ? '🗣️ Assistant is speaking out loud through your speakers…'
               : state === 'thinking'
               ? '⚡ AI is reasoning and executing tools…'
+              : state === 'error'
+              ? '🎯 Tap a phrase below to speak — the assistant still replies with real voice.'
               : '🎙️ Speak clearly into your microphone, or tap a quick response below:'}
           </p>
         )}
       </div>
 
-      {/* Quick Test Voice Triggers (Allows 1-tap speech simulation) */}
+      {/* Quick Test Voice Triggers (1-tap speech simulation) */}
       <div style={{ width: '100%' }}>
         <p style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: '6px', textAlign: 'center' }}>
           Tap to Speak Sentence directly:
@@ -640,7 +583,7 @@ export default function ElevenLabsVoiceSimulator({
           🔊 ElevenLabs Neural Voice
         </span>
         <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(16,185,129,0.15)', color: 'var(--green)', fontWeight: 600 }}>
-          🤖 Google Gemini 1.5/2.5 Flash
+          🤖 Google Gemini Flash
         </span>
       </div>
     </div>

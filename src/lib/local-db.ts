@@ -1,226 +1,67 @@
 /**
- * local-db.ts — localStorage-based data store
- * Provides CRUD for businesses, workflows, and calls.
- * Falls back gracefully when localStorage is unavailable (SSR).
+ * Local DB — localStorage-backed data store.
+ * Replaces Supabase for demo/offline usage.
+ * Supports businesses, workflows, and calls with full CRUD.
  */
-import type { Business, Workflow, Call } from '@/types'
-import { WORKFLOW_TEMPLATES } from '@/types'
 
-const BIZ_KEY = 'voiceai_businesses'
-const WF_KEY = 'voiceai_workflows'
-const CALLS_KEY = 'voiceai_calls'
-const SEEDED_KEY = 'voiceai_seeded_v1'
-
-// ─── SEED DATA ────────────────────────────────────────────────────────────────
-
-function makeSeedBusinesses(): Business[] {
-  return [
-    {
-      id: 'biz-seed-1',
-      owner_id: 'demo',
-      name: 'Sweet Delights Bakery',
-      type: 'cake_shop',
-      phone: '+91 98765 43210',
-      description: 'Fresh custom birthday, anniversary, and wedding cakes with same-day express delivery.',
-      language: 'en',
-      created_at: new Date(Date.now() - 1000 * 3600 * 48).toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 'biz-seed-2',
-      owner_id: 'demo',
-      name: 'Apex Family Clinic',
-      type: 'clinic',
-      phone: '+91 98111 22334',
-      description: 'Primary healthcare and patient consultations. Automated appointment booking via Google Calendar.',
-      language: 'en',
-      created_at: new Date(Date.now() - 1000 * 3600 * 72).toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 'biz-seed-3',
-      owner_id: 'demo',
-      name: 'SwiftGo Express Logistics',
-      type: 'delivery',
-      phone: '+91 99887 76655',
-      description: 'Intra-city parcel delivery, live courier status, and package routing support.',
-      language: 'en',
-      created_at: new Date(Date.now() - 1000 * 3600 * 96).toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 'biz-seed-4',
-      owner_id: 'demo',
-      name: 'Prestige Property Realty',
-      type: 'real_estate',
-      phone: '+91 97654 32100',
-      description: 'Residential and commercial real estate advisory, property viewings, and buyer qualification.',
-      language: 'en',
-      created_at: new Date(Date.now() - 1000 * 3600 * 120).toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  ]
+export interface Business {
+  id: string
+  name: string
+  type: string
+  phone?: string
+  email?: string
+  description?: string
+  greeting?: string
+  language?: string
+  userId: string
+  createdAt: string
+  updatedAt: string
 }
 
-function makeSeedWorkflows(): Workflow[] {
-  return [
-    {
-      id: 'wf-seed-1',
-      business_id: 'biz-seed-1',
-      name: 'Cake Order Intake & Urgency Qualification',
-      trigger: 'missed_call',
-      greeting: WORKFLOW_TEMPLATES.cake_shop.greeting!,
-      closing_message: WORKFLOW_TEMPLATES.cake_shop.closing_message!,
-      language: 'en',
-      fields: WORKFLOW_TEMPLATES.cake_shop.fields!,
-      conditions: WORKFLOW_TEMPLATES.cake_shop.conditions!,
-      post_action: 'create_record',
-      calendar_enabled: true,
-      is_active: true,
-      created_at: new Date(Date.now() - 1000 * 3600 * 48).toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 'wf-seed-2',
-      business_id: 'biz-seed-2',
-      name: 'Clinic Patient Appointment Booking',
-      trigger: 'missed_call',
-      greeting: WORKFLOW_TEMPLATES.clinic.greeting!,
-      closing_message: WORKFLOW_TEMPLATES.clinic.closing_message!,
-      language: 'en',
-      fields: WORKFLOW_TEMPLATES.clinic.fields!,
-      conditions: WORKFLOW_TEMPLATES.clinic.conditions!,
-      post_action: 'create_record',
-      calendar_enabled: true,
-      is_active: true,
-      created_at: new Date(Date.now() - 1000 * 3600 * 72).toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 'wf-seed-3',
-      business_id: 'biz-seed-3',
-      name: 'Courier Status & Package Routing',
-      trigger: 'missed_call',
-      greeting: WORKFLOW_TEMPLATES.delivery.greeting!,
-      closing_message: WORKFLOW_TEMPLATES.delivery.closing_message!,
-      language: 'en',
-      fields: WORKFLOW_TEMPLATES.delivery.fields!,
-      conditions: WORKFLOW_TEMPLATES.delivery.conditions!,
-      post_action: 'create_record',
-      calendar_enabled: false,
-      is_active: true,
-      created_at: new Date(Date.now() - 1000 * 3600 * 96).toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 'wf-seed-4',
-      business_id: 'biz-seed-4',
-      name: 'Property Viewing & Buyer Advisory',
-      trigger: 'missed_call',
-      greeting: WORKFLOW_TEMPLATES.real_estate.greeting!,
-      closing_message: WORKFLOW_TEMPLATES.real_estate.closing_message!,
-      language: 'en',
-      fields: WORKFLOW_TEMPLATES.real_estate.fields!,
-      conditions: WORKFLOW_TEMPLATES.real_estate.conditions!,
-      post_action: 'create_record',
-      calendar_enabled: true,
-      is_active: true,
-      created_at: new Date(Date.now() - 1000 * 3600 * 120).toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  ]
+export interface WorkflowStep {
+  id: string
+  type: 'collect' | 'confirm' | 'action' | 'end'
+  label: string
+  prompt?: string
+  field?: string
 }
 
-function makeSeedCalls(): Call[] {
-  return [
-    {
-      id: 'call-seed-1',
-      business_id: 'biz-seed-1',
-      workflow_id: 'wf-seed-1',
-      caller_name: 'Rahul Sharma',
-      caller_phone: '+91 98765 43210',
-      status: 'in_progress',
-      intent: 'Order Custom Chocolate Truffle Cake',
-      summary: 'Customer called to order a 1kg chocolate truffle cake for a birthday tomorrow. Delivery requested by 4:00 PM.',
-      urgency: 'urgent',
-      follow_up_status: 'pending',
-      transcript: [
-        { role: 'assistant', content: 'Hello, thanks for calling Sweet Delights Bakery. How can I assist you?', timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString() },
-        { role: 'user', content: 'I need a 1kg chocolate truffle cake urgently for tomorrow afternoon.', timestamp: new Date(Date.now() - 1000 * 60 * 14).toISOString() }
-      ],
-      collected_data: { flavour: 'Chocolate Truffle', weight: '1kg', required_date: 'Tomorrow' },
-      language_used: 'en',
-      created_at: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 'call-seed-2',
-      business_id: 'biz-seed-2',
-      workflow_id: 'wf-seed-2',
-      caller_name: 'Anita Verma',
-      caller_phone: '+91 98111 22334',
-      status: 'completed',
-      intent: 'Doctor Appointment Consultation',
-      summary: 'Patient requested appointment for tomorrow at 4 PM. Calendar slot confirmed and follow-up scheduled.',
-      urgency: 'normal',
-      follow_up_status: 'resolved',
-      calendar_event_id: 'cal_event_98231',
-      calendar_event_url: 'https://calendar.google.com',
-      transcript: [
-        { role: 'assistant', content: 'Hello, you have reached Apex Family Clinic. How can I help you today?', timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString() },
-        { role: 'user', content: 'I would like to book an appointment with Dr. Sharma tomorrow at 4 PM please.', timestamp: new Date(Date.now() - 1000 * 60 * 44).toISOString() }
-      ],
-      collected_data: { patient_name: 'Anita Verma', doctor_preference: 'Dr. Sharma', preferred_time: '16:00' },
-      language_used: 'en',
-      created_at: new Date(Date.now() - 1000 * 60 * 50).toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 'call-seed-3',
-      business_id: 'biz-seed-3',
-      workflow_id: 'wf-seed-3',
-      caller_name: 'Vikram Singh',
-      caller_phone: '+91 99887 76655',
-      status: 'completed',
-      intent: 'Package Status Tracking (ORD-101)',
-      summary: 'Package ORD-101 status queried. API confirmed: Out for delivery with courier.',
-      urgency: 'normal',
-      follow_up_status: 'contacted',
-      transcript: [
-        { role: 'assistant', content: 'Hello, SwiftGo Express. Do you need a dispatch or status check?', timestamp: new Date(Date.now() - 1000 * 3600 * 2).toISOString() },
-        { role: 'user', content: 'Can you check where my package ORD-101 is right now?', timestamp: new Date(Date.now() - 1000 * 3600 * 2 + 10000).toISOString() }
-      ],
-      collected_data: { order_id: 'ORD-101', status: 'Out for Delivery' },
-      language_used: 'en',
-      created_at: new Date(Date.now() - 1000 * 3600 * 3).toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 'call-seed-4',
-      business_id: 'biz-seed-1',
-      workflow_id: 'wf-seed-1',
-      caller_name: 'Dinesh Kumar',
-      caller_phone: '+91 97654 32100',
-      status: 'new',
-      intent: 'Birthday Party Catering Enquiry',
-      summary: 'Customer enquired about a 2kg vanilla cake and catering for tomorrow evening.',
-      urgency: 'normal',
-      follow_up_status: 'pending',
-      transcript: [
-        { role: 'assistant', content: 'Hello, welcome to Royal Bakery. Are you calling to place a new order?', timestamp: new Date(Date.now() - 1000 * 3600 * 5).toISOString() },
-        { role: 'user', content: 'Yes, I need a 2kg cake for tomorrow evening.', timestamp: new Date(Date.now() - 1000 * 3600 * 5 + 15000).toISOString() }
-      ],
-      collected_data: { weight: '2kg', flavour: 'Vanilla' },
-      language_used: 'en',
-      created_at: new Date(Date.now() - 1000 * 3600 * 6).toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  ]
+export interface Workflow {
+  id: string
+  businessId: string
+  name: string
+  useCase: string
+  steps: WorkflowStep[]
+  followUpAction: string
+  isActive: boolean
+  userId: string
+  createdAt: string
+  updatedAt: string
 }
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
+export interface CallRecord {
+  id: string
+  businessId: string
+  workflowId?: string
+  callerName?: string
+  callerPhone?: string
+  summary?: string
+  transcript?: string
+  status: 'completed' | 'missed' | 'in-progress'
+  duration?: number
+  toolsUsed?: string[]
+  userId: string
+  createdAt: string
+}
 
-function load<T>(key: string): T[] {
+const KEYS = {
+  businesses: 'voiceai_businesses',
+  workflows: 'voiceai_workflows',
+  calls: 'voiceai_calls',
+  seeded: 'voiceai_seeded',
+}
+
+function read<T>(key: string): T[] {
   if (typeof window === 'undefined') return []
   try {
     return JSON.parse(localStorage.getItem(key) || '[]')
@@ -229,141 +70,300 @@ function load<T>(key: string): T[] {
   }
 }
 
-function save<T>(key: string, data: T[]) {
-  if (typeof window === 'undefined') return
+function write<T>(key: string, data: T[]) {
   localStorage.setItem(key, JSON.stringify(data))
 }
 
-function ensureSeeded() {
-  if (typeof window === 'undefined') return
-  if (localStorage.getItem(SEEDED_KEY)) return
-  save(BIZ_KEY, makeSeedBusinesses())
-  save(WF_KEY, makeSeedWorkflows())
-  save(CALLS_KEY, makeSeedCalls())
-  localStorage.setItem(SEEDED_KEY, '1')
+function uid(): string {
+  return Math.random().toString(36).slice(2, 10)
 }
 
-// ─── PUBLIC API ───────────────────────────────────────────────────────────────
+/** Seed demo data once per browser */
+export function seedIfNeeded(userId: string) {
+  if (typeof window === 'undefined') return
+  const alreadySeeded = localStorage.getItem(KEYS.seeded)
+  if (alreadySeeded) return
+
+  const now = new Date().toISOString()
+
+  const businesses: Business[] = [
+    {
+      id: 'biz_bakery',
+      name: 'Sweet Delights Bakery',
+      type: 'Bakery',
+      phone: '+91 98765 43210',
+      email: 'hello@sweetdelights.com',
+      description: 'Custom cakes and pastries for all occasions',
+      greeting: 'Thank you for calling Sweet Delights Bakery! We specialise in custom cakes and pastries.',
+      language: 'en',
+      userId,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'biz_clinic',
+      name: 'Apex Family Clinic',
+      type: 'Healthcare',
+      phone: '+91 98765 11111',
+      email: 'appointments@apexclinic.com',
+      description: 'General practice and family medicine',
+      greeting: 'Thank you for calling Apex Family Clinic. How can I assist you today?',
+      language: 'en',
+      userId,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'biz_delivery',
+      name: 'FastTrack Logistics',
+      type: 'Delivery',
+      phone: '+91 99887 76655',
+      email: 'support@fasttrack.com',
+      description: 'Same-day and next-day delivery services',
+      greeting: 'FastTrack Logistics here! How can I help you with your delivery today?',
+      language: 'en',
+      userId,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'biz_realestate',
+      name: 'Prime Properties',
+      type: 'Real Estate',
+      phone: '+91 88776 65544',
+      email: 'info@primeproperties.com',
+      description: 'Residential and commercial property consultants',
+      greeting: 'Welcome to Prime Properties! Are you looking to buy, sell, or rent a property?',
+      language: 'en',
+      userId,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ]
+
+  const workflows: Workflow[] = [
+    {
+      id: 'wf_bakery_order',
+      businessId: 'biz_bakery',
+      name: 'Cake Order Collection',
+      useCase: 'missed_call_follow_up',
+      steps: [
+        { id: 's1', type: 'collect', label: 'Customer Name', prompt: 'May I have your name?', field: 'name' },
+        { id: 's2', type: 'collect', label: 'Order Type', prompt: 'What type of cake are you ordering?', field: 'order_type' },
+        { id: 's3', type: 'collect', label: 'Delivery Date', prompt: 'When do you need it?', field: 'delivery_date' },
+        { id: 's4', type: 'action', label: 'Book Calendar', prompt: 'Book the order in calendar' },
+        { id: 's5', type: 'end', label: 'Confirm', prompt: 'Thank you! We will confirm your order shortly.' },
+      ],
+      followUpAction: 'calendar',
+      isActive: true,
+      userId,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'wf_clinic_appt',
+      businessId: 'biz_clinic',
+      name: 'Appointment Booking',
+      useCase: 'appointment_booking',
+      steps: [
+        { id: 's1', type: 'collect', label: 'Patient Name', prompt: 'What is the patient name?', field: 'name' },
+        { id: 's2', type: 'collect', label: 'Reason for Visit', prompt: 'What is the reason for your visit?', field: 'reason' },
+        { id: 's3', type: 'collect', label: 'Preferred Date', prompt: 'What date and time works for you?', field: 'date' },
+        { id: 's4', type: 'action', label: 'Schedule Appointment', prompt: 'Booking your appointment' },
+        { id: 's5', type: 'end', label: 'Confirm', prompt: 'Your appointment is confirmed. See you soon!' },
+      ],
+      followUpAction: 'calendar',
+      isActive: true,
+      userId,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'wf_delivery_track',
+      businessId: 'biz_delivery',
+      name: 'Order Status Lookup',
+      useCase: 'order_status',
+      steps: [
+        { id: 's1', type: 'collect', label: 'Order Number', prompt: 'Please provide your order number.', field: 'order_id' },
+        { id: 's2', type: 'action', label: 'Lookup Order', prompt: 'Checking your delivery status' },
+        { id: 's3', type: 'end', label: 'Status Report', prompt: 'Your order status has been shared.' },
+      ],
+      followUpAction: 'sms',
+      isActive: true,
+      userId,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ]
+
+  const calls: CallRecord[] = [
+    {
+      id: 'call_001',
+      businessId: 'biz_bakery',
+      workflowId: 'wf_bakery_order',
+      callerName: 'Priya Sharma',
+      callerPhone: '+91 98000 11111',
+      summary: 'Custom birthday cake for 2kg chocolate cake, delivery on Saturday.',
+      status: 'completed',
+      duration: 180,
+      toolsUsed: ['Google Calendar'],
+      userId,
+      createdAt: new Date(Date.now() - 3600000).toISOString(),
+    },
+    {
+      id: 'call_002',
+      businessId: 'biz_clinic',
+      workflowId: 'wf_clinic_appt',
+      callerName: 'Rahul Mehta',
+      callerPhone: '+91 98000 22222',
+      summary: 'Appointment booked for general check-up, tomorrow at 10 AM.',
+      status: 'completed',
+      duration: 240,
+      toolsUsed: ['Google Calendar'],
+      userId,
+      createdAt: new Date(Date.now() - 7200000).toISOString(),
+    },
+    {
+      id: 'call_003',
+      businessId: 'biz_delivery',
+      workflowId: 'wf_delivery_track',
+      callerName: 'Anjali Patel',
+      callerPhone: '+91 98000 33333',
+      summary: 'Order ORD-4521 is out for delivery, expected by 6 PM.',
+      status: 'completed',
+      duration: 90,
+      toolsUsed: ['Order Lookup'],
+      userId,
+      createdAt: new Date(Date.now() - 10800000).toISOString(),
+    },
+    {
+      id: 'call_004',
+      businessId: 'biz_realestate',
+      callerName: 'Unknown Caller',
+      callerPhone: '+91 98000 44444',
+      summary: 'Missed call — no voicemail left.',
+      status: 'missed',
+      userId,
+      createdAt: new Date(Date.now() - 14400000).toISOString(),
+    },
+  ]
+
+  write(KEYS.businesses, businesses)
+  write(KEYS.workflows, workflows)
+  write(KEYS.calls, calls)
+  localStorage.setItem(KEYS.seeded, '1')
+}
+
+// ─── Businesses ───────────────────────────────────────────────────────────────
 
 export const localDB = {
-  // ── Businesses ──
-  getBusinesses(): Business[] {
-    ensureSeeded()
-    return load<Business>(BIZ_KEY)
+  businesses: {
+    list(userId: string): Business[] {
+      return read<Business>(KEYS.businesses).filter(b => b.userId === userId)
+    },
+    get(id: string): Business | null {
+      return read<Business>(KEYS.businesses).find(b => b.id === id) ?? null
+    },
+    create(data: Omit<Business, 'id' | 'createdAt' | 'updatedAt'>): Business {
+      const all = read<Business>(KEYS.businesses)
+      const item: Business = {
+        ...data,
+        id: 'biz_' + uid(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+      write(KEYS.businesses, [...all, item])
+      return item
+    },
+    update(id: string, data: Partial<Business>): Business | null {
+      const all = read<Business>(KEYS.businesses)
+      const idx = all.findIndex(b => b.id === id)
+      if (idx === -1) return null
+      all[idx] = { ...all[idx], ...data, updatedAt: new Date().toISOString() }
+      write(KEYS.businesses, all)
+      return all[idx]
+    },
+    delete(id: string) {
+      write(KEYS.businesses, read<Business>(KEYS.businesses).filter(b => b.id !== id))
+    },
   },
 
-  getBusiness(id: string): Business | null {
-    return this.getBusinesses().find(b => b.id === id) || null
+  workflows: {
+    list(userId: string): Workflow[] {
+      return read<Workflow>(KEYS.workflows).filter(w => w.userId === userId)
+    },
+    listByBusiness(businessId: string): Workflow[] {
+      return read<Workflow>(KEYS.workflows).filter(w => w.businessId === businessId)
+    },
+    get(id: string): Workflow | null {
+      return read<Workflow>(KEYS.workflows).find(w => w.id === id) ?? null
+    },
+    create(data: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>): Workflow {
+      const all = read<Workflow>(KEYS.workflows)
+      const item: Workflow = {
+        ...data,
+        id: 'wf_' + uid(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+      write(KEYS.workflows, [...all, item])
+      return item
+    },
+    update(id: string, data: Partial<Workflow>): Workflow | null {
+      const all = read<Workflow>(KEYS.workflows)
+      const idx = all.findIndex(w => w.id === id)
+      if (idx === -1) return null
+      all[idx] = { ...all[idx], ...data, updatedAt: new Date().toISOString() }
+      write(KEYS.workflows, all)
+      return all[idx]
+    },
+    delete(id: string) {
+      write(KEYS.workflows, read<Workflow>(KEYS.workflows).filter(w => w.id !== id))
+    },
   },
 
-  saveBusiness(biz: Omit<Business, 'id' | 'created_at' | 'updated_at'>): Business {
-    const businesses = this.getBusinesses()
-    const newBiz: Business = {
-      ...biz,
-      id: `biz_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-    save(BIZ_KEY, [...businesses, newBiz])
-    return newBiz
-  },
-
-  updateBusiness(id: string, updates: Partial<Business>): boolean {
-    const businesses = this.getBusinesses()
-    const idx = businesses.findIndex(b => b.id === id)
-    if (idx === -1) return false
-    businesses[idx] = { ...businesses[idx], ...updates, updated_at: new Date().toISOString() }
-    save(BIZ_KEY, businesses)
-    return true
-  },
-
-  deleteBusiness(id: string) {
-    save(BIZ_KEY, this.getBusinesses().filter(b => b.id !== id))
-    // Also clean up workflows and calls for this business
-    save(WF_KEY, this.getWorkflows().filter(w => w.business_id !== id))
-    save(CALLS_KEY, this.getCalls().filter(c => c.business_id !== id))
-  },
-
-  // ── Workflows ──
-  getWorkflows(): Workflow[] {
-    ensureSeeded()
-    return load<Workflow>(WF_KEY)
-  },
-
-  getWorkflow(id: string): Workflow | null {
-    return this.getWorkflows().find(w => w.id === id) || null
-  },
-
-  saveWorkflow(wf: Omit<Workflow, 'id' | 'created_at' | 'updated_at'>): Workflow {
-    const workflows = this.getWorkflows()
-    const newWf: Workflow = {
-      ...wf,
-      id: `wf_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-    save(WF_KEY, [...workflows, newWf])
-    return newWf
-  },
-
-  updateWorkflow(id: string, updates: Partial<Workflow>): boolean {
-    const workflows = this.getWorkflows()
-    const idx = workflows.findIndex(w => w.id === id)
-    if (idx === -1) return false
-    workflows[idx] = { ...workflows[idx], ...updates, updated_at: new Date().toISOString() }
-    save(WF_KEY, workflows)
-    return true
-  },
-
-  deleteWorkflow(id: string) {
-    save(WF_KEY, this.getWorkflows().filter(w => w.id !== id))
-  },
-
-  // ── Calls ──
-  getCalls(): Call[] {
-    ensureSeeded()
-    return load<Call>(CALLS_KEY).sort((a, b) =>
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    )
-  },
-
-  getCall(id: string): Call | null {
-    return this.getCalls().find(c => c.id === id) || null
-  },
-
-  saveCall(call: Omit<Call, 'id' | 'created_at' | 'updated_at'>): Call {
-    const calls = this.getCalls()
-    const newCall: Call = {
-      ...call,
-      id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-    save(CALLS_KEY, [...calls, newCall])
-    return newCall
-  },
-
-  updateCall(id: string, updates: Partial<Call>): boolean {
-    const calls = load<Call>(CALLS_KEY)
-    const idx = calls.findIndex(c => c.id === id)
-    if (idx === -1) return false
-    calls[idx] = { ...calls[idx], ...updates, updated_at: new Date().toISOString() }
-    save(CALLS_KEY, calls)
-    return true
-  },
-
-  // ── Enriched queries (attach business data) ──
-  getCallsWithBusiness(): (Call & { business: Business | null })[] {
-    const calls = this.getCalls()
-    const businesses = this.getBusinesses()
-    const bizMap = Object.fromEntries(businesses.map(b => [b.id, b]))
-    return calls.map(c => ({ ...c, business: bizMap[c.business_id] || null }))
-  },
-
-  getWorkflowsWithBusiness(): (Workflow & { business: Business | null })[] {
-    const workflows = this.getWorkflows()
-    const businesses = this.getBusinesses()
-    const bizMap = Object.fromEntries(businesses.map(b => [b.id, b]))
-    return workflows.map(w => ({ ...w, business: bizMap[w.business_id] || null }))
+  calls: {
+    list(userId: string): CallRecord[] {
+      return read<CallRecord>(KEYS.calls)
+        .filter(c => c.userId === userId)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    },
+    get(id: string): CallRecord | null {
+      return read<CallRecord>(KEYS.calls).find(c => c.id === id) ?? null
+    },
+    create(data: Omit<CallRecord, 'id' | 'createdAt'>): CallRecord {
+      const all = read<CallRecord>(KEYS.calls)
+      const item: CallRecord = {
+        ...data,
+        id: 'call_' + uid(),
+        createdAt: new Date().toISOString(),
+      }
+      write(KEYS.calls, [...all, item])
+      return item
+    },
+    update(id: string, data: Partial<CallRecord>): CallRecord | null {
+      const all = read<CallRecord>(KEYS.calls)
+      const idx = all.findIndex(c => c.id === id)
+      if (idx === -1) return null
+      all[idx] = { ...all[idx], ...data }
+      write(KEYS.calls, all)
+      return all[idx]
+    },
+    delete(id: string) {
+      write(KEYS.calls, read<CallRecord>(KEYS.calls).filter(c => c.id !== id))
+    },
+    stats(userId: string) {
+      const calls = localDB.calls.list(userId)
+      return {
+        total: calls.length,
+        completed: calls.filter(c => c.status === 'completed').length,
+        missed: calls.filter(c => c.status === 'missed').length,
+        today: calls.filter(c => {
+          const d = new Date(c.createdAt)
+          const now = new Date()
+          return d.getDate() === now.getDate() && d.getMonth() === now.getMonth()
+        }).length,
+      }
+    },
   },
 }

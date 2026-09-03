@@ -1,10 +1,10 @@
 'use client'
-import { useState, useEffect, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import toast from 'react-hot-toast'
 import {
-  Calendar, Webhook, CheckCircle2, Copy, Smartphone,
-  Power, Volume2, Bell, Clock, Building2, Save
+  Calendar, CheckCircle2, Smartphone,
+  Power, Volume2, Bell, Clock, Save, ArrowRight
 } from 'lucide-react'
 
 interface BusinessSettings {
@@ -15,8 +15,6 @@ interface BusinessSettings {
   autoHandleAfterHours: boolean
   urgentSmsAlerts: boolean
   dailyEmailDigest: boolean
-  calendarSync: boolean
-  deliveryApiSync: boolean
 }
 
 const DEFAULT_SETTINGS: BusinessSettings = {
@@ -27,49 +25,25 @@ const DEFAULT_SETTINGS: BusinessSettings = {
   autoHandleAfterHours: true,
   urgentSmsAlerts: true,
   dailyEmailDigest: true,
-  calendarSync: true,
-  deliveryApiSync: true,
 }
 
-function SettingsContent() {
-  const searchParams = useSearchParams()
-  const [googleConnected, setGoogleConnected] = useState(false)
-  const [copied, setCopied] = useState(false)
+export default function SettingsPage() {
   const [settings, setSettings] = useState<BusinessSettings>(DEFAULT_SETTINGS)
-  const [webhookUrl, setWebhookUrl] = useState('http://localhost:3000/api/vapi/webhook')
 
   useEffect(() => {
-    setWebhookUrl(`${window.location.origin}/api/vapi/webhook`)
     try {
       const saved = localStorage.getItem('voiceai_business_settings')
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        setSettings({ ...DEFAULT_SETTINGS, ...parsed })
-      }
+      if (saved) setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(saved) })
     } catch {
-      // ignore
+      // ignore malformed local settings
     }
   }, [])
 
-  useEffect(() => {
-    if (searchParams.get('google_connected') === 'true') {
-      setGoogleConnected(true)
-      toast.success('Google Calendar connected')
-    }
-  }, [searchParams])
-
   const handleSave = () => {
+    // These are cosmetic assistant-persona preferences only. Security-sensitive integrations
+    // (Google Calendar) are connected per-business and stored encrypted server-side, not here.
     localStorage.setItem('voiceai_business_settings', JSON.stringify(settings))
-    toast.success('Business settings updated successfully')
-  }
-
-
-
-  const copyWebhook = () => {
-    navigator.clipboard.writeText(webhookUrl)
-    setCopied(true)
-    toast.success('Copied to clipboard')
-    setTimeout(() => setCopied(false), 2000)
+    toast.success('Assistant preferences saved')
   }
 
   return (
@@ -79,7 +53,7 @@ function SettingsContent() {
         <div>
           <h1 className="page-title">Assistant & Business Settings</h1>
           <p className="page-subtitle">
-            Configure your Voice AI assistant’s personality, business hours, notification preferences, and integrations.
+            Configure your Voice AI assistant’s personality, business hours, and notification preferences.
           </p>
         </div>
         <button onClick={handleSave} className="btn-primary">
@@ -284,7 +258,7 @@ function SettingsContent() {
       <div className="settings-group">
         <h2 className="settings-group-title">Connected Business Integrations</h2>
         <div className="settings-section">
-          {/* Calendar */}
+          {/* Calendar — connected per business, not here */}
           <div className="settings-row">
             <div className="flex items-start gap-3.5 min-w-0">
               <div
@@ -296,31 +270,14 @@ function SettingsContent() {
               <div className="min-w-0">
                 <p className="text-[13px] font-medium text-white">Google Calendar Appointment Booking</p>
                 <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-                  Enables assistant to check slot availability and schedule appointments in real time
+                  Connected per business — tokens are encrypted server-side. Open a business profile to
+                  connect or disconnect its calendar.
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3 shrink-0">
-              {googleConnected ? (
-                <>
-                  <span className="badge badge-completed">Connected</span>
-                  <button
-                    onClick={() => { setGoogleConnected(false); toast.success('Disconnected') }}
-                    className="btn-secondary text-xs py-1.5 px-3"
-                    style={{ color: '#f87171' }}
-                  >
-                    Disconnect
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span className="badge badge-closed">Not Connected</span>
-                  <a href="/api/auth/google" className="btn-secondary text-xs py-1.5 px-3">
-                    Connect
-                  </a>
-                </>
-              )}
-            </div>
+            <Link href="/businesses" className="btn-secondary text-xs py-1.5 px-3 shrink-0 inline-flex items-center gap-1.5">
+              Manage per business <ArrowRight size={13} />
+            </Link>
           </div>
 
           {/* Delivery API */}
@@ -333,57 +290,21 @@ function SettingsContent() {
                 <Smartphone size={15} style={{ color: 'var(--text-secondary)' }} />
               </div>
               <div className="min-w-0">
-                <p className="text-[13px] font-medium text-white">Live Courier & Order Tracking API</p>
+                <p className="text-[13px] font-medium text-white">Order & Delivery Status Lookup</p>
                 <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-                  Enables assistant to query live package delivery statuses by order ID
+                  The assistant can look up order status by ID. Currently backed by a simulated courier
+                  dataset — swap in a real courier API in <code>src/server/tools/order-lookup.ts</code>.
                 </p>
               </div>
             </div>
             <div className="shrink-0">
-              <span className="badge badge-completed">Active</span>
+              <span className="badge badge-new">Simulated</span>
             </div>
           </div>
         </div>
       </div>
 
-
-
-      {/* ── Section 5: Telephony Forwarding & Webhook ────────── */}
-      <div className="settings-group">
-        <h2 className="settings-group-title">Phone Line & Webhook Integration</h2>
-        <div className="settings-section">
-          <div className="settings-row flex-col items-start gap-3.5">
-            <div className="flex items-start gap-3.5 w-full">
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
-                style={{ background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)' }}
-              >
-                <Webhook size={15} style={{ color: 'var(--text-secondary)' }} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-medium text-white">Incoming Call Webhook URL</p>
-                <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-                  Forward your business missed calls to this endpoint to trigger your Voice AI assistant.
-                </p>
-              </div>
-            </div>
-            <div className="w-full flex items-center gap-2 pl-[44px]">
-              <code
-                className="flex-1 text-xs font-mono px-3 py-2 rounded-lg truncate text-white"
-                style={{ background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)' }}
-              >
-                {webhookUrl}
-              </code>
-              <button onClick={copyWebhook} className="btn-secondary text-xs py-2 px-3 shrink-0">
-                {copied ? <CheckCircle2 size={13} style={{ color: 'var(--green)' }} /> : <Copy size={13} />}
-                {copied ? 'Copied' : 'Copy'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Section 6: System Status ────────────────────────── */}
+      {/* ── Section 5: System Status ────────────────────────── */}
       <div className="settings-group">
         <h2 className="settings-group-title">Platform Status</h2>
         <div className="settings-section">
@@ -403,28 +324,12 @@ function SettingsContent() {
               </div>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
-              <span className="status-dot status-dot-green" />
-              <span className="text-[12px] font-medium" style={{ color: 'var(--green)' }}>All Systems Operational</span>
+              <CheckCircle2 size={14} style={{ color: 'var(--green)' }} />
+              <span className="text-[12px] font-medium" style={{ color: 'var(--green)' }}>Operational</span>
             </div>
           </div>
         </div>
       </div>
     </div>
-  )
-}
-
-export default function SettingsPage() {
-  return (
-    <Suspense fallback={
-      <div className="p-16 text-center">
-        <div
-          className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-3"
-          style={{ borderColor: 'var(--green)' }}
-        />
-        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Loading settings...</p>
-      </div>
-    }>
-      <SettingsContent />
-    </Suspense>
   )
 }

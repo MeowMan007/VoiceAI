@@ -1,611 +1,405 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
-import { localDB } from '@/lib/local-db'
-import { Business, WorkflowField, WorkflowCondition, WORKFLOW_TEMPLATES, BusinessType, Language } from '@/types'
+import { useEffect, useState, Suspense } from 'react'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
+import { getUser } from '@/lib/demo-auth'
+import { localDB, Business, Workflow, WorkflowStep } from '@/lib/local-db'
 import toast from 'react-hot-toast'
-import { ArrowLeft, ArrowRight, Plus, Trash2, Loader2, CheckCircle2, GripVertical, Calendar } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Loader2, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import { v4 as uuidv4 } from 'uuid'
 
-const STEPS = ['Basic Info', 'Greeting', 'Data Fields', 'Conditions', 'Post Action', 'Review']
+const USE_CASES = [
+  { key: 'missed_call_follow_up', label: 'Missed Call Follow-Up', description: 'Collect info when a customer calls back after a missed call' },
+  { key: 'appointment_booking', label: 'Appointment Booking', description: 'Book appointments and add to calendar automatically' },
+  { key: 'order_status', label: 'Order Status Lookup', description: 'Look up delivery or order status in real-time' },
+  { key: 'lead_qualification', label: 'Lead Qualification', description: 'Qualify inbound sales leads and collect requirements' },
+  { key: 'service_request', label: 'Service Request', description: 'Handle maintenance or repair service requests' },
+  { key: 'general_enquiry', label: 'General Enquiry', description: 'Handle general customer enquiries and FAQs' },
+]
 
-export default function WorkflowFormPage() {
+const FOLLOW_UP_ACTIONS = [
+  { key: 'calendar', label: '📅 Book Google Calendar Event' },
+  { key: 'sms', label: '💬 Send SMS Follow-Up' },
+  { key: 'email', label: '📧 Send Email Summary' },
+  { key: 'none', label: '📋 Save Record Only' },
+]
+
+const STEP_TEMPLATES: Record<string, WorkflowStep[]> = {
+  missed_call_follow_up: [
+    { id: 's1', type: 'collect', label: 'Customer Name', prompt: 'May I have your name please?', field: 'name' },
+    { id: 's2', type: 'collect', label: 'Purpose of Call', prompt: 'What were you calling about?', field: 'purpose' },
+    { id: 's3', type: 'collect', label: 'Callback Number', prompt: 'What number should we call you back on?', field: 'callback_phone' },
+    { id: 's4', type: 'end', label: 'Confirm', prompt: "Thank you! We'll call you back shortly." },
+  ],
+  appointment_booking: [
+    { id: 's1', type: 'collect', label: 'Patient / Customer Name', prompt: 'What is your name?', field: 'name' },
+    { id: 's2', type: 'collect', label: 'Reason for Visit', prompt: 'What is the reason for your visit?', field: 'reason' },
+    { id: 's3', type: 'collect', label: 'Preferred Date & Time', prompt: 'What date and time works best for you?', field: 'preferred_datetime' },
+    { id: 's4', type: 'action', label: 'Book Calendar Event', prompt: 'Booking your appointment in the calendar' },
+    { id: 's5', type: 'end', label: 'Confirm', prompt: 'Your appointment is confirmed! We will see you then.' },
+  ],
+  order_status: [
+    { id: 's1', type: 'collect', label: 'Order Number', prompt: 'Please provide your order or tracking number.', field: 'order_id' },
+    { id: 's2', type: 'action', label: 'Look Up Order', prompt: 'Looking up your order status' },
+    { id: 's3', type: 'end', label: 'Status Report', prompt: 'Your order status has been found and shared.' },
+  ],
+  lead_qualification: [
+    { id: 's1', type: 'collect', label: 'Contact Name', prompt: 'May I have your name?', field: 'name' },
+    { id: 's2', type: 'collect', label: 'Interest Area', prompt: 'What are you looking for?', field: 'interest' },
+    { id: 's3', type: 'collect', label: 'Budget Range', prompt: 'What is your approximate budget?', field: 'budget' },
+    { id: 's4', type: 'collect', label: 'Timeline', prompt: 'What is your timeline for this?', field: 'timeline' },
+    { id: 's5', type: 'end', label: 'Confirm', prompt: "Thank you! Our team will reach out to you with options." },
+  ],
+  service_request: [
+    { id: 's1', type: 'collect', label: 'Customer Name', prompt: 'May I have your name?', field: 'name' },
+    { id: 's2', type: 'collect', label: 'Service Needed', prompt: 'What service do you need?', field: 'service_type' },
+    { id: 's3', type: 'collect', label: 'Issue Description', prompt: 'Can you briefly describe the issue?', field: 'description' },
+    { id: 's4', type: 'collect', label: 'Preferred Visit Time', prompt: 'When would you like us to visit?', field: 'visit_time' },
+    { id: 's5', type: 'action', label: 'Schedule Visit', prompt: 'Scheduling your service visit' },
+    { id: 's6', type: 'end', label: 'Confirm', prompt: "We've logged your request. Our team will confirm the visit time." },
+  ],
+  general_enquiry: [
+    { id: 's1', type: 'collect', label: 'Your Name', prompt: 'May I have your name?', field: 'name' },
+    { id: 's2', type: 'collect', label: 'Enquiry', prompt: 'How can we help you today?', field: 'enquiry' },
+    { id: 's3', type: 'end', label: 'Confirm', prompt: "Thank you! We've noted your enquiry and will get back to you soon." },
+  ],
+}
+
+function uid() { return 's' + Math.random().toString(36).slice(2, 8) }
+
+function WorkflowFormContent() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const isNew = params?.id === 'new'
+  const [userId, setUserId] = useState('')
 
-  const [step, setStep] = useState(0)
   const [businesses, setBusinesses] = useState<Business[]>([])
   const [saving, setSaving] = useState(false)
-  const [loading, setLoading] = useState(false)
 
   const [form, setForm] = useState({
-    business_id: 'biz-seed-1',
-    name: WORKFLOW_TEMPLATES.cake_shop.name || 'Cake Order Intake',
-    trigger: 'missed_call',
-    greeting: WORKFLOW_TEMPLATES.cake_shop.greeting || '',
-    closing_message: WORKFLOW_TEMPLATES.cake_shop.closing_message || '',
-    language: 'en' as Language,
-    fields: WORKFLOW_TEMPLATES.cake_shop.fields || [] as WorkflowField[],
-    conditions: WORKFLOW_TEMPLATES.cake_shop.conditions || [] as WorkflowCondition[],
-    post_action: 'create_record',
-    calendar_enabled: true,
-    is_active: true,
+    name: '',
+    businessId: searchParams?.get('business_id') || '',
+    useCase: 'missed_call_follow_up',
+    followUpAction: 'calendar',
+    isActive: true,
+    steps: STEP_TEMPLATES.missed_call_follow_up as WorkflowStep[],
   })
 
   useEffect(() => {
-    const bizData = localDB.getBusinesses()
-    if (bizData && bizData.length > 0) {
-      setBusinesses(bizData)
-      if (isNew) {
-        setForm(f => ({ ...f, business_id: bizData[0].id }))
-        applyTemplate(bizData[0].id, bizData)
-      }
-    }
+    const user = getUser()
+    if (!user) { router.push('/login'); return }
+    setUserId(user.id)
+
+    const bizs = localDB.businesses.list(user.id)
+    setBusinesses(bizs)
 
     if (!isNew && params?.id) {
-      const data = localDB.getWorkflow(params.id as string)
-      if (data) {
+      const wf = localDB.workflows.get(params.id as string)
+      if (wf) {
         setForm({
-          business_id: data.business_id,
-          name: data.name,
-          trigger: data.trigger,
-          greeting: data.greeting,
-          closing_message: data.closing_message,
-          language: data.language,
-          fields: data.fields || [],
-          conditions: data.conditions || [],
-          post_action: data.post_action,
-          calendar_enabled: data.calendar_enabled,
-          is_active: data.is_active,
+          name: wf.name,
+          businessId: wf.businessId,
+          useCase: wf.useCase,
+          followUpAction: wf.followUpAction,
+          isActive: wf.isActive,
+          steps: wf.steps || [],
         })
+      } else {
+        toast.error('Workflow not found')
+        router.push('/workflows')
       }
+    } else if (isNew && bizs.length > 0 && !searchParams?.get('business_id')) {
+      setForm(f => ({ ...f, businessId: bizs[0].id }))
     }
-  }, [params?.id])
+  }, [isNew, params?.id, router, searchParams])
 
-  const applyTemplate = (businessId: string, currentBusinesses = businesses) => {
-    const business = currentBusinesses.find(b => b.id === businessId)
-    if (!business) return
-    const template = WORKFLOW_TEMPLATES[business.type as BusinessType]
-    if (template) {
-      setForm(f => ({
-        ...f,
-        business_id: businessId,
-        name: template.name || f.name,
-        greeting: template.greeting || f.greeting,
-        closing_message: template.closing_message || f.closing_message,
-        fields: template.fields || [],
-        conditions: template.conditions || [],
-        calendar_enabled: template.calendar_enabled || false,
-        language: business.language,
-      }))
-      toast.success('Loaded template for ' + business.name)
+  const handleUseCaseChange = (key: string) => {
+    const uc = USE_CASES.find(u => u.key === key)
+    setForm(f => ({
+      ...f,
+      useCase: key,
+      name: uc ? uc.label : f.name,
+      steps: STEP_TEMPLATES[key] || STEP_TEMPLATES.general_enquiry,
+    }))
+  }
+
+  const addStep = () => {
+    const newStep: WorkflowStep = {
+      id: uid(),
+      type: 'collect',
+      label: 'New Question',
+      prompt: 'Please provide your answer.',
+      field: 'field_' + uid(),
     }
+    setForm(f => ({ ...f, steps: [...f.steps, newStep] }))
   }
 
-  const addField = () => {
-    setForm(f => ({
-      ...f,
-      fields: [...f.fields, {
-        id: uuidv4(), label: '', key: '', type: 'text', required: false, order: f.fields.length + 1
-      }]
-    }))
+  const updateStep = (idx: number, data: Partial<WorkflowStep>) => {
+    setForm(f => {
+      const steps = [...f.steps]
+      steps[idx] = { ...steps[idx], ...data }
+      return { ...f, steps }
+    })
   }
 
-  const updateField = (id: string, updates: Partial<WorkflowField>) => {
-    setForm(f => ({
-      ...f,
-      fields: f.fields.map(field => field.id === id ? { ...field, ...updates } : field)
-    }))
+  const removeStep = (idx: number) => {
+    setForm(f => ({ ...f, steps: f.steps.filter((_, i) => i !== idx) }))
   }
 
-  const removeField = (id: string) => {
-    setForm(f => ({ ...f, fields: f.fields.filter(field => field.id !== id) }))
-  }
-
-  const addCondition = () => {
-    setForm(f => ({
-      ...f,
-      conditions: [...f.conditions, {
-        id: uuidv4(), field: '', operator: 'equals', value: '', action: 'mark_urgent', action_label: ''
-      }]
-    }))
-  }
-
-  const updateCondition = (id: string, updates: Partial<WorkflowCondition>) => {
-    setForm(f => ({
-      ...f,
-      conditions: f.conditions.map(c => c.id === id ? { ...c, ...updates } : c)
-    }))
-  }
-
-  const removeCondition = (id: string) => {
-    setForm(f => ({ ...f, conditions: f.conditions.filter(c => c.id !== id) }))
-  }
-
-  const handleSubmit = () => {
-    if (!form.business_id) { toast.error('Please select a business'); return }
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!form.businessId) { toast.error('Please select a business'); return }
     if (!form.name.trim()) { toast.error('Workflow name is required'); return }
-    if (!form.greeting.trim()) { toast.error('Greeting message is required'); return }
-
     setSaving(true)
-    if (isNew) {
-      localDB.saveWorkflow(form)
-      toast.success('Workflow created!')
-    } else {
-      localDB.updateWorkflow(params?.id as string, form)
-      toast.success('Workflow updated!')
+    try {
+      if (isNew) {
+        localDB.workflows.create({ ...form, userId })
+        toast.success('Workflow created!')
+      } else {
+        localDB.workflows.update(params?.id as string, form)
+        toast.success('Workflow updated!')
+      }
+      router.push('/workflows')
+    } catch {
+      toast.error('Save failed. Please try again.')
     }
-    router.push('/workflows')
     setSaving(false)
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-4xl w-full mx-auto space-y-6">
+    <div className="p-6 lg:p-8 max-w-3xl w-full mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-zinc-800 pb-5">
-        <Link
-          href="/workflows"
-          id="back-to-workflows"
-          className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white transition-colors"
-        >
+        <Link href="/workflows" className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white transition-colors">
           <ArrowLeft size={16} />
         </Link>
         <div>
           <h1 className="text-xl font-bold tracking-tight text-white">
-            {isNew ? 'Create New Workflow' : 'Edit Workflow'}
+            {isNew ? 'Create Workflow' : 'Edit Workflow'}
           </h1>
           <p className="text-xs text-zinc-400 mt-0.5">
-            Step {step + 1} of {STEPS.length}: <span className="text-emerald-400 font-medium">{STEPS[step]}</span>
+            Configure how your AI voice assistant handles missed calls for this business.
           </p>
         </div>
       </div>
 
-      {/* Stepper Navigation */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-        {STEPS.map((s, i) => {
-          const isCurrent = i === step
-          const isDone = i < step
-          return (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setStep(i)}
-              className={cn(
-                'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border whitespace-nowrap transition-all',
-                isCurrent
-                  ? 'bg-emerald-500/10 border-emerald-500 text-white'
-                  : isDone
-                  ? 'bg-zinc-900 border-zinc-800 text-zinc-300'
-                  : 'bg-black border-zinc-800 text-zinc-500'
-              )}
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Basic Info */}
+        <div className="glass-card p-5 space-y-4">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-emerald-400">
+            Basic Info
+          </label>
+
+          <div>
+            <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+              Business <span className="text-emerald-400">*</span>
+            </label>
+            <select
+              id="workflow-business"
+              className="input-field"
+              value={form.businessId}
+              onChange={e => setForm(f => ({ ...f, businessId: e.target.value }))}
+              required
             >
-              <span
-                className={cn(
-                  'w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold',
-                  isCurrent ? 'bg-emerald-500 text-black' : isDone ? 'bg-zinc-700 text-white' : 'bg-zinc-900 text-zinc-600'
-                )}
-              >
-                {i + 1}
-              </span>
-              <span>{s}</span>
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Step Body */}
-      <div className="glass-card p-6 space-y-5">
-        {step === 0 && (
-          <div className="space-y-4">
-            <h2 className="text-sm font-semibold text-white uppercase tracking-wider text-emerald-400">
-              1. Basic Configuration
-            </h2>
-
-            <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                Target Business <span className="text-emerald-400">*</span>
-              </label>
-              <select
-                id="workflow-business"
-                className="input-field"
-                value={form.business_id}
-                onChange={e => applyTemplate(e.target.value)}
-              >
-                {businesses.map(b => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} ({b.type.replace('_', ' ')})
-                  </option>
-                ))}
-              </select>
-              <p className="text-[11px] text-emerald-400 mt-1">
-                ✓ Auto-populates industry greeting, fields, and calendar tools.
+              <option value="">Select a business...</option>
+              {businesses.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+            {businesses.length === 0 && (
+              <p className="text-xs mt-1.5" style={{ color: 'var(--text-muted)' }}>
+                No businesses found. <Link href="/businesses/new" style={{ color: 'var(--green)' }}>Create one first →</Link>
               </p>
-            </div>
+            )}
+          </div>
 
-            <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                Workflow Name <span className="text-emerald-400">*</span>
-              </label>
-              <input
-                id="workflow-name"
-                type="text"
-                className="input-field"
-                placeholder="e.g. Cake Order Intake & Scheduling"
-                value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+              Workflow Name <span className="text-emerald-400">*</span>
+            </label>
+            <input
+              id="workflow-name"
+              type="text"
+              className="input-field"
+              placeholder="e.g. Appointment Booking, Order Follow-Up..."
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              required
+            />
+          </div>
+        </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                  Language Preference
-                </label>
-                <select
-                  id="workflow-language"
-                  className="input-field"
-                  value={form.language}
-                  onChange={e => setForm(f => ({ ...f, language: e.target.value as Language }))}
-                >
-                  <option value="en">English</option>
-                  <option value="hi">Hindi (हिंदी)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                  Google Calendar Agent Tool
-                </label>
+        {/* Use Case */}
+        <div className="glass-card p-5 space-y-3">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-emerald-400">
+            Use Case
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {USE_CASES.map(uc => {
+              const selected = form.useCase === uc.key
+              return (
                 <button
+                  key={uc.key}
                   type="button"
-                  onClick={() => setForm(f => ({ ...f, calendar_enabled: !f.calendar_enabled }))}
+                  id={`usecase-${uc.key}`}
+                  onClick={() => handleUseCaseChange(uc.key)}
                   className={cn(
-                    'w-full p-2.5 rounded-lg border text-xs font-medium flex items-center justify-between transition-colors',
-                    form.calendar_enabled
-                      ? 'bg-emerald-500/10 border-emerald-500 text-white'
-                      : 'bg-zinc-900 border-zinc-800 text-zinc-400'
+                    'p-3 rounded-lg text-left transition-all border text-xs',
+                    selected
+                      ? 'bg-emerald-500/10 border-emerald-500'
+                      : 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700'
                   )}
                 >
-                  <span className="flex items-center gap-1.5">
-                    <Calendar size={13} className={form.calendar_enabled ? 'text-emerald-400' : 'text-zinc-500'} />
-                    Google Calendar Tool
-                  </span>
-                  <span className={cn('text-[11px] font-semibold', form.calendar_enabled ? 'text-emerald-400' : 'text-zinc-500')}>
-                    {form.calendar_enabled ? 'Enabled' : 'Disabled'}
-                  </span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {step === 1 && (
-          <div className="space-y-4">
-            <h2 className="text-sm font-semibold text-white uppercase tracking-wider text-emerald-400">
-              2. Greeting & Closing Dialogues
-            </h2>
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-medium text-zinc-300">
-                  Assistant Opening Greeting <span className="text-emerald-400">*</span>
-                </label>
-                <span className="text-[11px] text-zinc-500">
-                  Use <code className="text-emerald-400 bg-zinc-900 px-1 py-0.5 rounded">[Business Name]</code> as variable
-                </span>
-              </div>
-              <textarea
-                id="workflow-greeting"
-                className="input-field resize-none leading-relaxed"
-                rows={4}
-                value={form.greeting}
-                onChange={e => setForm(f => ({ ...f, greeting: e.target.value }))}
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                Closing Message <span className="text-emerald-400">*</span>
-              </label>
-              <textarea
-                id="workflow-closing"
-                className="input-field resize-none leading-relaxed"
-                rows={3}
-                value={form.closing_message}
-                onChange={e => setForm(f => ({ ...f, closing_message: e.target.value }))}
-              />
-            </div>
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-semibold text-white uppercase tracking-wider text-emerald-400">
-                  3. Information to Collect
-                </h2>
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  Define what information the AI assistant should capture from callers.
-                </p>
-              </div>
-              <button
-                type="button"
-                id="add-field-btn"
-                onClick={addField}
-                className="btn-secondary text-xs py-1.5 px-3"
-              >
-                <Plus size={13} /> Add Field
-              </button>
-            </div>
-
-            <div className="space-y-2.5">
-              {form.fields.map((field, idx) => (
-                <div
-                  key={field.id}
-                  className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800 space-y-2"
-                >
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-zinc-500 font-mono text-[11px]">Field #{idx + 1}</span>
-                    <div className="flex items-center gap-3">
-                      <label className="flex items-center gap-1.5 cursor-pointer text-xs text-zinc-300">
-                        <input
-                          type="checkbox"
-                          checked={field.required}
-                          onChange={e => updateField(field.id, { required: e.target.checked })}
-                          className="accent-emerald-500"
-                        />
-                        <span>Required</span>
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => removeField(field.id)}
-                        className="text-zinc-500 hover:text-rose-400"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                  <div className="font-semibold text-white mb-1">{uc.label}</div>
+                  <div className="text-zinc-400 text-[11px]">{uc.description}</div>
+                  {selected && (
+                    <div className="mt-1.5 text-emerald-400 text-[10px] font-semibold flex items-center gap-1">
+                      <CheckCircle2 size={11} /> Selected
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <input
-                      type="text"
-                      className="input-field text-xs"
-                      placeholder="Label (e.g. Cake Flavour)"
-                      value={field.label}
-                      onChange={e => updateField(field.id, { label: e.target.value, key: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
-                    />
-                    <input
-                      type="text"
-                      className="input-field text-xs font-mono"
-                      placeholder="key (e.g. cake_flavour)"
-                      value={field.key}
-                      onChange={e => updateField(field.id, { key: e.target.value })}
-                    />
-                    <select
-                      className="input-field text-xs"
-                      value={field.type}
-                      onChange={e => updateField(field.id, { type: e.target.value as WorkflowField['type'] })}
-                    >
-                      <option value="text">Text Input</option>
-                      <option value="number">Number</option>
-                      <option value="date">Date</option>
-                      <option value="time">Time</option>
-                      <option value="select">Dropdown Select</option>
-                      <option value="boolean">Yes / No</option>
-                    </select>
-                  </div>
-                </div>
-              ))}
-            </div>
+                  )}
+                </button>
+              )
+            })}
           </div>
-        )}
+        </div>
 
-        {step === 3 && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-semibold text-white uppercase tracking-wider text-emerald-400">
-                  4. Conditional Logic & Rules
-                </h2>
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  Add if-then branches (e.g. flag emergency or delivery within 24 hours as High Priority).
-                </p>
-              </div>
-              <button
-                type="button"
-                id="add-condition-btn"
-                onClick={addCondition}
-                className="btn-secondary text-xs py-1.5 px-3"
+        {/* Conversation Steps */}
+        <div className="glass-card p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-emerald-400">
+              Conversation Steps
+            </label>
+            <button
+              type="button"
+              id="add-step-btn"
+              onClick={addStep}
+              className="btn-secondary text-xs py-1.5 px-3 inline-flex items-center gap-1.5"
+            >
+              <Plus size={12} /> Add Step
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {form.steps.map((step, idx) => (
+              <div
+                key={step.id}
+                className={cn('p-4 rounded-xl border text-xs space-y-2', {
+                  'bg-emerald-500/5 border-emerald-500/30': step.type === 'end',
+                  'bg-purple-500/5 border-purple-500/30': step.type === 'action',
+                  'bg-blue-500/5 border-blue-500/30': step.type === 'collect',
+                  'bg-zinc-900/50 border-zinc-800': step.type === 'confirm',
+                })}
               >
-                <Plus size={13} /> Add Rule
-              </button>
-            </div>
-
-            <div className="space-y-2.5">
-              {form.conditions.map((cond) => (
-                <div
-                  key={cond.id}
-                  className="p-3.5 rounded-lg bg-zinc-900/60 border border-zinc-800 space-y-2 text-xs"
-                >
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-white">{idx + 1}. {step.label}</span>
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-emerald-400 text-xs">IF</span>
                     <select
-                      className="input-field py-1 flex-1 text-xs"
-                      value={cond.field}
-                      onChange={e => updateCondition(cond.id, { field: e.target.value })}
+                      className="input-field text-xs py-1"
+                      style={{ width: 'auto', fontSize: '11px', padding: '4px 8px' }}
+                      value={step.type}
+                      onChange={e => updateStep(idx, { type: e.target.value as WorkflowStep['type'] })}
                     >
-                      <option value="">Choose field...</option>
-                      {form.fields.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                      <option value="collect">Collect Info</option>
+                      <option value="action">Execute Tool</option>
+                      <option value="confirm">Confirm</option>
+                      <option value="end">End Call</option>
                     </select>
-
-                    <select
-                      className="input-field py-1 w-28 text-xs"
-                      value={cond.operator}
-                      onChange={e => updateCondition(cond.id, { operator: e.target.value as WorkflowCondition['operator'] })}
-                    >
-                      <option value="equals">equals</option>
-                      <option value="contains">contains</option>
-                      <option value="less_than">less than</option>
-                      <option value="greater_than">greater than</option>
-                    </select>
-
-                    <input
-                      type="text"
-                      className="input-field py-1 flex-1 text-xs"
-                      placeholder="comparison value"
-                      value={cond.value}
-                      onChange={e => updateCondition(cond.id, { value: e.target.value })}
-                    />
-
                     <button
                       type="button"
-                      onClick={() => removeCondition(cond.id)}
-                      className="text-zinc-500 hover:text-rose-400"
+                      onClick={() => removeStep(idx)}
+                      className="p-1 rounded text-zinc-500 hover:text-red-400 transition-colors"
                     >
-                      <Trash2 size={13} />
+                      <Trash2 size={12} />
                     </button>
                   </div>
-
-                  <div className="flex items-center gap-2 pt-1 border-t border-zinc-800">
-                    <span className="font-bold text-white text-xs">THEN</span>
-                    <select
-                      className="input-field py-1 flex-1 text-xs"
-                      value={cond.action}
-                      onChange={e => updateCondition(cond.id, {
-                        action: e.target.value as WorkflowCondition['action'],
-                        action_label: e.target.options[e.target.selectedIndex].text
-                      })}
-                    >
-                      <option value="mark_urgent">Mark Call Record as High Priority (Urgent)</option>
-                      <option value="create_calendar_event">Trigger Google Calendar Booking</option>
-                      <option value="create_callback">Queue Owner Callback Task</option>
-                      <option value="send_notification">Send Instant SMS / Email Notification</option>
-                    </select>
-                  </div>
                 </div>
-              ))}
-            </div>
+
+                <input
+                  className="input-field text-xs"
+                  placeholder="Step label (e.g. 'Customer Name')"
+                  value={step.label}
+                  onChange={e => updateStep(idx, { label: e.target.value })}
+                />
+                <input
+                  className="input-field text-xs"
+                  placeholder="What the AI says (prompt)"
+                  value={step.prompt || ''}
+                  onChange={e => updateStep(idx, { prompt: e.target.value })}
+                />
+                {step.type === 'collect' && (
+                  <input
+                    className="input-field text-xs"
+                    placeholder="Field name (e.g. 'customer_name')"
+                    value={step.field || ''}
+                    onChange={e => updateStep(idx, { field: e.target.value })}
+                  />
+                )}
+              </div>
+            ))}
           </div>
-        )}
+        </div>
 
-        {step === 4 && (
-          <div className="space-y-4">
-            <h2 className="text-sm font-semibold text-white uppercase tracking-wider text-emerald-400">
-              5. Post-Collection Action
-            </h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {[
-                { id: 'create_record', title: 'Save Customer Record', desc: 'Saves caller info, summary, and transcript to dashboard' },
-                { id: 'create_callback', title: 'Create Callback Task', desc: 'Flags as pending callback for business owner follow-up' },
-                { id: 'send_summary', title: 'Send Owner Summary', desc: 'Generates structured AI summary for fast response' },
-              ].map(act => {
-                const isSelected = form.post_action === act.id
-                return (
-                  <button
-                    key={act.id}
-                    type="button"
-                    onClick={() => setForm(f => ({ ...f, post_action: act.id }))}
-                    className={cn(
-                      'p-4 rounded-lg border text-left flex flex-col justify-between transition-all',
-                      isSelected
-                        ? 'bg-emerald-500/10 border-emerald-500 text-white'
-                        : 'bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:border-zinc-700'
-                    )}
-                  >
-                    <div>
-                      <h3 className="font-semibold text-xs text-white mb-1">{act.title}</h3>
-                      <p className="text-[11px] text-zinc-400 leading-relaxed">{act.desc}</p>
-                    </div>
-                    {isSelected && (
-                      <span className="text-[10px] font-semibold text-emerald-400 flex items-center gap-1 mt-3">
-                        <CheckCircle2 size={12} /> Active
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
+        {/* Follow-Up Action */}
+        <div className="glass-card p-5 space-y-3">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-emerald-400">
+            After Call Action
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {FOLLOW_UP_ACTIONS.map(action => {
+              const selected = form.followUpAction === action.key
+              return (
+                <button
+                  key={action.key}
+                  type="button"
+                  id={`action-${action.key}`}
+                  onClick={() => setForm(f => ({ ...f, followUpAction: action.key }))}
+                  className={cn(
+                    'p-3 rounded-lg text-left transition-all border text-sm',
+                    selected
+                      ? 'bg-emerald-500/10 border-emerald-500 text-white'
+                      : 'bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                  )}
+                >
+                  {action.label}
+                  {selected && <CheckCircle2 size={12} className="inline ml-2 text-emerald-400" />}
+                </button>
+              )
+            })}
           </div>
-        )}
+        </div>
 
-        {step === 5 && (
-          <div className="space-y-4 text-xs">
-            <h2 className="text-sm font-semibold text-white uppercase tracking-wider text-emerald-400">
-              6. Review & Save
-            </h2>
-
-            <div className="divide-y divide-zinc-800 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 space-y-2 text-zinc-300">
-              <div className="flex justify-between py-1.5">
-                <span className="text-zinc-400">Workflow Name:</span>
-                <span className="font-semibold text-white">{form.name}</span>
-              </div>
-              <div className="flex justify-between py-1.5">
-                <span className="text-zinc-400">Language:</span>
-                <span className="text-white uppercase">{form.language}</span>
-              </div>
-              <div className="flex justify-between py-1.5">
-                <span className="text-zinc-400">Google Calendar Tool:</span>
-                <span className="text-emerald-400 font-medium">
-                  {form.calendar_enabled ? 'Enabled (Check & Book)' : 'Disabled'}
-                </span>
-              </div>
-              <div className="flex justify-between py-1.5">
-                <span className="text-zinc-400">Collected Fields:</span>
-                <span className="text-white">{form.fields.length} data fields configured</span>
-              </div>
-              <div className="flex justify-between py-1.5">
-                <span className="text-zinc-400">Conditional Rules:</span>
-                <span className="text-white">{form.conditions.length} active rules</span>
-              </div>
-            </div>
-
-            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2">
-              <CheckCircle2 size={14} className="shrink-0" />
-              <span>Ready to deploy. The voice assistant simulator will immediately use this workflow.</span>
-            </div>
+        {/* Submit */}
+        <div className="flex items-center justify-between pt-2">
+          <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.isActive}
+              onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))}
+              className="rounded border-zinc-700"
+            />
+            Activate workflow immediately
+          </label>
+          <div className="flex items-center gap-3">
+            <Link href="/workflows" className="btn-secondary text-xs">Cancel</Link>
+            <button
+              id="save-workflow-btn"
+              type="submit"
+              disabled={saving || !form.name.trim() || !form.businessId}
+              className="btn-primary text-xs py-2 px-4"
+            >
+              {saving && <Loader2 size={14} className="animate-spin" />}
+              {saving ? 'Saving...' : (isNew ? 'Create Workflow' : 'Save Changes')}
+            </button>
           </div>
-        )}
-      </div>
-
-      {/* Navigation Buttons */}
-      <div className="flex items-center justify-between border-t border-zinc-800 pt-5">
-        {step > 0 ? (
-          <button
-            type="button"
-            onClick={() => setStep(s => s - 1)}
-            className="btn-secondary text-xs"
-          >
-            <ArrowLeft size={14} /> Previous
-          </button>
-        ) : <div />}
-
-        {step < STEPS.length - 1 ? (
-          <button
-            type="button"
-            id="workflow-next-btn"
-            onClick={() => setStep(s => s + 1)}
-            className="btn-primary text-xs"
-          >
-            Next Step <ArrowRight size={14} />
-          </button>
-        ) : (
-          <button
-            type="button"
-            id="save-workflow-btn"
-            onClick={handleSubmit}
-            disabled={saving}
-            className="btn-primary text-xs py-2 px-4"
-          >
-            {saving && <Loader2 size={14} className="animate-spin" />}
-            {saving ? 'Saving...' : (isNew ? 'Create Workflow' : 'Save Changes')}
-          </button>
-        )}
-      </div>
+        </div>
+      </form>
     </div>
+  )
+}
+
+export default function WorkflowFormPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-zinc-500">Loading...</div>}>
+      <WorkflowFormContent />
+    </Suspense>
   )
 }
