@@ -260,9 +260,9 @@ function SimulatorContent() {
   const [collectedData, setCollectedData] = useState<Record<string, unknown>>({})
   const [toolLogs, setToolLogs] = useState<string[]>([])
 
-  // Voice mode state (ElevenLabs TTS + Deepgram STT)
-  const [voiceMode, setVoiceMode] = useState(false)
-  const [voiceStarted, setVoiceStarted] = useState(false)
+  // Voice vs Chat simulator mode — default to VOICE
+  const [simulatorMode, setSimulatorMode] = useState<'voice' | 'chat'>('voice')
+  const [autoSpeak, setAutoSpeak] = useState(true)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -285,6 +285,24 @@ function SimulatorContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Spoken audio playback helper
+  const speakAssistantText = useCallback((text: string, language?: string) => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel()
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.lang = language === 'hi' ? 'hi-IN' : 'en-US'
+      utterance.rate = 1.02
+      utterance.pitch = 1.0
+      const voices = window.speechSynthesis.getVoices()
+      const preferredVoice = voices.find(v =>
+        language === 'hi'
+          ? (v.lang.includes('hi') || v.name.includes('Hindi'))
+          : (v.lang.includes('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha') || v.name.includes('David') || v.name.includes('Zira')))
+      )
+      if (preferredVoice) utterance.voice = preferredVoice
+      window.speechSynthesis.speak(utterance)
+    }
+  }, [])
 
   const startConversation = () => {
     if (!selectedWorkflow) { toast.error('Select a workflow first'); return }
@@ -296,6 +314,10 @@ function SimulatorContent() {
     const bizName = (selectedWorkflow.business as { name: string })?.name || 'our business'
     const greeting = selectedWorkflow.greeting.replace(/\[Business Name\]/g, bizName)
     setMessages([{ id: uuidv4(), role: 'assistant', content: greeting, timestamp: new Date() }])
+
+    if (autoSpeak) {
+      speakAssistantText(greeting, selectedWorkflow.language)
+    }
   }
 
   const sendMessage = async (text?: string) => {
@@ -332,12 +354,18 @@ function SimulatorContent() {
         toast.success(`Tool: ${name}`, { duration: 2500 })
       }
 
+      const replyContent = data.message || data.error || 'Let me look into that for you.'
       const assistantMsg: SimulatorMessage = {
         id: uuidv4(), role: 'assistant',
-        content: data.message || data.error || 'Let me look into that for you.',
+        content: replyContent,
         timestamp: new Date()
       }
       setMessages(prev => prev.filter(m => !m.isLoading).concat(assistantMsg))
+
+      // Auto speak response out loud!
+      if (autoSpeak) {
+        speakAssistantText(replyContent, selectedWorkflow.language)
+      }
 
       // Extract fields from user message
       const updatedFields: Record<string, unknown> = {}
@@ -352,13 +380,15 @@ function SimulatorContent() {
       if (data.toolResult) Object.assign(updatedFields, data.toolResult)
       setCollectedData(prev => ({ ...prev, ...updatedFields }))
     } catch {
+      const fallbackText = selectedWorkflow.language === 'hi'
+        ? 'क्षमा करें, कुछ तकनीकी समस्या हुई। कृपया फिर से कहें।'
+        : 'Sorry, a brief error occurred. Could you repeat that?'
       setMessages(prev => prev.filter(m => !m.isLoading).concat({
         id: uuidv4(), role: 'assistant',
-        content: selectedWorkflow.language === 'hi'
-          ? 'क्षमा करें, कुछ तकनीकी समस्या हुई। कृपया फिर से कहें।'
-          : 'Sorry, a brief error occurred. Could you repeat that?',
+        content: fallbackText,
         timestamp: new Date()
       }))
+      if (autoSpeak) speakAssistantText(fallbackText, selectedWorkflow.language)
     }
     setLoading(false)
   }
@@ -385,16 +415,6 @@ function SimulatorContent() {
         language_used: selectedWorkflow.language || 'en'
       })
 
-      fetch('/api/chat', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          transcript: messages.filter(m => !m.isLoading).map(m => ({ role: m.role, content: m.content, timestamp: m.timestamp })),
-          workflow: selectedWorkflow,
-          calledData: collectedData
-        })
-      }).catch(() => {})
-
       setSaved(true)
       toast.success('Call recorded & saved to dashboard!')
     } catch {
@@ -403,9 +423,10 @@ function SimulatorContent() {
     }
   }
 
-  const resetConversation = async () => {
-    setVoiceMode(false)
-    setVoiceStarted(false)
+  const resetConversation = () => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel()
+    }
     setMessages([])
     setStarted(false)
     setSaved(false)
@@ -421,32 +442,58 @@ function SimulatorContent() {
       <div className="page-header">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h1 className="page-title">Voice AI Simulator</h1>
-            <span className="badge badge-contacted">Live Tester</span>
+            <h1 className="page-title">Voice AI Personal Assistant Simulator</h1>
+            <span className="badge badge-completed">Voice-First Agent</span>
           </div>
           <p className="page-subtitle">
-            Simulate missed-call AI conversations — text or real voice (Deepgram + ElevenLabs) — with Google Calendar scheduling and tool calling
+            Simulate missed-call AI conversations — real-time spoken voice (ElevenLabs + Deepgram) with Google Calendar tool calling & order tracking
           </p>
         </div>
-        {started && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {!saved ? (
-              <button onClick={saveConversation} className="btn-primary" style={{ fontSize: '12px', padding: '8px 14px' }}>
-                <Save size={13} /> Save Record
-              </button>
-            ) : (
-              <span className="badge badge-completed" style={{ padding: '6px 12px', fontSize: '12px' }}>
-                <CheckCircle2 size={12} /> Saved
-              </span>
-            )}
-            <button onClick={resetConversation} className="btn-secondary" style={{ fontSize: '12px', padding: '8px 14px' }}>
-              <RefreshCw size={13} /> End Call
+
+        {/* Mode Selector & Action Buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{
+            display: 'flex',
+            background: 'var(--bg-elevated)',
+            padding: '3px',
+            borderRadius: '10px',
+            border: '1px solid var(--border-subtle)'
+          }}>
+            <button
+              onClick={() => { setSimulatorMode('voice'); resetConversation() }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '6px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600,
+                background: simulatorMode === 'voice' ? 'var(--green)' : 'transparent',
+                color: simulatorMode === 'voice' ? '#000' : 'var(--text-secondary)',
+                border: 'none', cursor: 'pointer', transition: 'all 0.15s'
+              }}
+            >
+              <Mic size={13} /> Live Voice Call (Phone Mode)
+            </button>
+            <button
+              onClick={() => { setSimulatorMode('chat'); resetConversation() }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '6px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600,
+                background: simulatorMode === 'chat' ? 'var(--green)' : 'transparent',
+                color: simulatorMode === 'chat' ? '#000' : 'var(--text-secondary)',
+                border: 'none', cursor: 'pointer', transition: 'all 0.15s'
+              }}
+            >
+              <Volume2 size={13} /> Chat & Spoken Voice
             </button>
           </div>
-        )}
+
+          {messages.length > 1 && (
+            <button onClick={saveConversation} className="btn-primary" style={{ fontSize: '12px', padding: '8px 14px' }}>
+              <Save size={13} /> Save to Records
+            </button>
+          )}
+        </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: '20px', height: 'calc(100vh - 200px)', minHeight: '600px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '20px', minHeight: '620px' }}>
 
         {/* Left Panel */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
@@ -454,7 +501,7 @@ function SimulatorContent() {
           {/* Workflow Picker */}
           <div className="glass-card" style={{ padding: '16px' }}>
             <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--green)', marginBottom: '8px' }}>
-              Active Workflow
+              Active Missed-Call Workflow
             </label>
             <select
               id="simulator-workflow-select"
@@ -479,11 +526,11 @@ function SimulatorContent() {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                   <span style={{ fontWeight: 600, color: '#fff' }}>{(selectedWorkflow.business as { name: string })?.name}</span>
                   <span className={cn('badge', isHindi ? 'badge-pending' : 'badge-new')} style={{ fontSize: '10px' }}>
-                    {isHindi ? 'Hindi' : 'English'}
+                    {isHindi ? 'Hindi (हिंदी)' : 'English'}
                   </span>
                 </div>
                 <p style={{ color: 'var(--text-muted)' }}>
-                  Trigger: Missed Call &middot; {(selectedWorkflow.fields as unknown[])?.length || 0} fields
+                  Trigger: Missed Call &middot; {(selectedWorkflow.fields as unknown[])?.length || 0} fields to capture
                 </p>
                 {selectedWorkflow.calendar_enabled && (
                   <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--green)', fontSize: '10px', fontWeight: 600 }}>
@@ -497,18 +544,23 @@ function SimulatorContent() {
           {/* Quick Test Scenarios */}
           <div className="glass-card" style={{ padding: '16px' }}>
             <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--green)', marginBottom: '8px' }}>
-              Quick Test Scenarios
+              Quick Test Triggers
             </label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {QUICK_SCENARIOS.map(s => (
                 <button
                   key={s.label}
                   onClick={() => {
-                    if (!started) {
-                      startConversation()
-                      setTimeout(() => sendMessage(s.text), 500)
-                    } else {
+                    if (simulatorMode === 'voice') {
+                      // Trigger spoken phrase in voice mode
                       sendMessage(s.text)
+                    } else {
+                      if (!started) {
+                        startConversation()
+                        setTimeout(() => sendMessage(s.text), 400)
+                      } else {
+                        sendMessage(s.text)
+                      }
                     }
                   }}
                   style={{
@@ -530,11 +582,11 @@ function SimulatorContent() {
             </div>
           </div>
 
-          {/* Collected Fields */}
+          {/* Captured Fields */}
           {selectedWorkflow?.fields && (
             <div className="glass-card" style={{ padding: '16px' }}>
               <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--green)', marginBottom: '8px' }}>
-                Data Capture
+                Captured Information
               </label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                 {(selectedWorkflow.fields as { key: string; label: string; required: boolean }[]).map(field => {
@@ -547,10 +599,7 @@ function SimulatorContent() {
                       border: `1px solid ${has ? 'rgba(16,185,129,0.25)' : 'var(--border-subtle)'}`
                     }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: has ? 'var(--green-bright)' : 'var(--text-muted)' }}>
-                        {has
-                          ? <CheckCircle2 size={11} />
-                          : <div style={{ width: 10, height: 10, borderRadius: '50%', border: '1px solid var(--border)' }} />
-                        }
+                        {has ? <CheckCircle2 size={11} /> : <div style={{ width: 10, height: 10, borderRadius: '50%', border: '1px solid var(--border)' }} />}
                         {field.label}
                         {field.required && <span style={{ color: '#f87171' }}>*</span>}
                       </span>
@@ -566,7 +615,7 @@ function SimulatorContent() {
           {toolLogs.length > 0 && (
             <div className="glass-card" style={{ padding: '16px' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--green)', marginBottom: '8px' }}>
-                <Sparkles size={11} /> Tool Executions
+                <Sparkles size={11} /> Agent Tool Executions
               </label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                 {toolLogs.map((log, i) => (
@@ -583,188 +632,193 @@ function SimulatorContent() {
           )}
         </div>
 
-        {/* Right — Chat & Voice Panel */}
-        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {/* Call Status Bar */}
-          <div style={{
-            padding: '14px 20px',
-            borderBottom: '1px solid var(--border-subtle)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: 'var(--bg-elevated)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{
-                width: 36, height: 36, borderRadius: '10px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: started ? 'var(--green)' : 'var(--bg-inset)',
-                border: started ? 'none' : '1px solid var(--border-subtle)',
-                color: started ? '#000' : 'var(--text-muted)'
-              }}>
-                <Mic size={16} />
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <p style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>
-                    {(selectedWorkflow?.business as { name: string })?.name || 'Voice Assistant'}
-                  </p>
-                  {started && (
-                    <span style={{
-                      width: 7, height: 7, borderRadius: '50%',
-                      background: 'var(--green)',
-                      boxShadow: '0 0 6px rgba(16,185,129,0.6)',
-                      animation: 'ping 1.5s infinite'
-                    }} />
-                  )}
-                </div>
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  {voiceMode
-                    ? 'Live Voice Call Active'
-                    : started
-                      ? 'AI Text Simulator Active'
-                      : 'Ready to simulate'}
-                  {isHindi && ' · Hindi (हिंदी)'}
-                </p>
-              </div>
-            </div>
-          </div>
+        {/* Right — Main Voice Simulator Interface */}
+        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: '560px' }}>
 
-          {/* Messages area */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {!started ? (
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '40px 24px' }}>
-                <div style={{
-                  width: 56, height: 56, borderRadius: '16px', marginBottom: '16px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)',
-                  color: 'var(--green)'
-                }}>
-                  <Phone size={24} />
-                </div>
-                <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#fff', marginBottom: '8px' }}>
-                  Start Missed-Call Simulation
-                </h3>
-                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '24px', maxWidth: '320px' }}>
-                  Choose text simulation for instant AI replies, or start a live voice call powered by Vapi for real speech interaction.
+          {/* Render Mode: Voice Phone Call Mode (Primary) */}
+          {simulatorMode === 'voice' && selectedWorkflow && (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '20px', gap: '16px' }}>
+              <ElevenLabsVoiceSimulator
+                workflow={selectedWorkflow}
+                messages={messages}
+                onMessage={msg => setMessages(prev => [...prev, msg])}
+                onToolLog={log => setToolLogs(prev => [...prev, log])}
+                onEnd={() => {
+                  toast.success('Voice call ended')
+                }}
+              />
+
+              {/* In-Call Transcript Scroll Box */}
+              <div style={{
+                flex: 1, maxHeight: '240px', overflowY: 'auto',
+                padding: '12px 16px', borderRadius: '12px',
+                background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)',
+                display: 'flex', flexDirection: 'column', gap: '8px'
+              }}>
+                <p style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                  Live Conversation Transcript:
                 </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', maxWidth: '320px' }}>
-                  <button
-                    id="start-simulation-btn"
-                    onClick={startConversation}
-                    className="btn-primary"
-                    style={{ justifyContent: 'center', gap: '8px', fontSize: '13px', padding: '10px' }}
-                  >
-                    <Phone size={14} /> Start Text Simulation
-                  </button>
-                  <button
-                    id="start-voice-btn"
-                    onClick={() => {
-                      setVoiceMode(true)
-                      setVoiceStarted(true)
-                      setStarted(true)
-                    }}
-                    className="btn-secondary"
-                    style={{ justifyContent: 'center', gap: '8px', fontSize: '13px', padding: '10px' }}
-                  >
-                    <Mic size={14} style={{ color: 'var(--green)' }} /> Start Live Voice Call
-                  </button>
-                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center' }}>
-                    Voice: Deepgram STT + ElevenLabs TTS — add API keys to .env.local
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <>
-                {/* Voice mode — ElevenLabs + Deepgram */}
-                {voiceMode && voiceStarted && selectedWorkflow && (
-                  <ElevenLabsVoiceSimulator
-                    workflow={selectedWorkflow}
-                    messages={messages}
-                    onMessage={msg => setMessages(prev => [...prev, msg])}
-                    onToolLog={log => setToolLogs(prev => [...prev, log])}
-                    onEnd={() => {
-                      setVoiceMode(false)
-                      setVoiceStarted(false)
-                    }}
-                  />
-                )}
-                {messages.map(msg => (
-                  <div
-                    key={msg.id}
-                    style={{ display: 'flex', gap: '10px', flexDirection: msg.role === 'user' ? 'row-reverse' : 'row' }}
-                  >
-                    <div style={{
-                      width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: msg.role === 'user' ? 'var(--green)' : 'var(--bg-surface)',
-                      border: msg.role === 'user' ? 'none' : '1px solid var(--border)',
-                      color: msg.role === 'user' ? '#000' : '#fff'
-                    }}>
-                      {msg.role === 'user' ? <User size={13} /> : <Bot size={13} />}
-                    </div>
-                    <div style={{
-                      maxWidth: '80%',
-                      padding: '10px 14px',
-                      borderRadius: msg.role === 'user' ? '12px 2px 12px 12px' : '2px 12px 12px 12px',
-                      background: msg.role === 'user' ? 'var(--green)' : 'var(--bg-inset)',
-                      border: msg.role === 'user' ? 'none' : '1px solid var(--border-subtle)',
-                      color: msg.role === 'user' ? '#000' : '#fff',
-                      fontSize: '13px',
-                      lineHeight: 1.5
-                    }}>
-                      <p style={{ fontSize: '9px', fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', opacity: 0.6 }}>
-                        {msg.role === 'user' ? 'Caller' : 'AI Assistant'}
-                      </p>
-                      {msg.isLoading ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '2px 0' }}>
-                          <div className="typing-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--green)' }} />
-                          <div className="typing-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--green)' }} />
-                          <div className="typing-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--green)' }} />
-                        </div>
-                      ) : msg.content}
-                    </div>
+                {messages.map(m => (
+                  <div key={m.id} style={{ fontSize: '12px', display: 'flex', gap: '6px' }}>
+                    <span style={{ fontWeight: 600, color: m.role === 'assistant' ? 'var(--green)' : '#60a5fa', flexShrink: 0 }}>
+                      {m.role === 'assistant' ? 'Voice AI:' : 'Caller:'}
+                    </span>
+                    <span style={{ color: '#e4e4e7', lineHeight: 1.4 }}>{m.content}</span>
                   </div>
                 ))}
                 <div ref={messagesEndRef} />
-              </>
-            )}
-          </div>
+              </div>
+            </div>
+          )}
 
-          {/* Text input bar — hide in voice mode */}
-          {started && !voiceMode && (
-            <div style={{
-              padding: '14px 20px',
-              borderTop: '1px solid var(--border-subtle)',
-              background: 'var(--bg-elevated)'
-            }}>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <input
-                  id="simulator-message-input"
-                  ref={inputRef}
-                  type="text"
-                  className="input-field"
-                  style={{ flex: 1, fontSize: '13px', padding: '9px 12px' }}
-                  placeholder={isHindi ? 'यहाँ टाइप करें... (e.g. कल शाम 4 बजे अपॉइंटमेंट चाहिए)' : 'Type your reply... (e.g. Schedule callback tomorrow at 4 PM)'}
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && !loading && sendMessage()}
-                  disabled={loading}
-                  autoFocus
-                />
+          {/* Render Mode: Chat & Audio Mode */}
+          {simulatorMode === 'chat' && (
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              {/* Chat Subheader */}
+              <div style={{
+                padding: '12px 20px',
+                borderBottom: '1px solid var(--border-subtle)',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                background: 'var(--bg-elevated)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Volume2 size={16} className="text-emerald-400" />
+                  <span style={{ fontSize: '12px', color: '#fff', fontWeight: 600 }}>
+                    Spoken Audio Chat Mode
+                  </span>
+                </div>
                 <button
-                  id="send-message-btn"
-                  onClick={() => sendMessage()}
-                  disabled={!input.trim() || loading}
-                  className="btn-primary"
-                  style={{ padding: '9px 14px', flexShrink: 0 }}
+                  onClick={() => setAutoSpeak(!autoSpeak)}
+                  style={{
+                    fontSize: '11px', padding: '4px 10px', borderRadius: '6px',
+                    background: autoSpeak ? 'rgba(16,185,129,0.15)' : 'var(--bg-inset)',
+                    border: `1px solid ${autoSpeak ? 'var(--green)' : 'var(--border)'}`,
+                    color: autoSpeak ? 'var(--green)' : 'var(--text-muted)',
+                    cursor: 'pointer'
+                  }}
                 >
-                  <Send size={14} />
+                  {autoSpeak ? '🔊 Auto-Speak Audio: ON' : '🔇 Audio: OFF'}
                 </button>
               </div>
-              <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>
-                {isHindi ? 'हिंदी और English दोनों में बात कर सकते हैं' : 'Try: "Book appointment tomorrow 4PM" or "Track order ORD-101"'} &nbsp;&middot;&nbsp; Autonomous Tool Calling Active
-              </p>
+
+              {/* Chat Messages */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {!started ? (
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '40px 24px' }}>
+                    <div style={{
+                      width: 56, height: 56, borderRadius: '16px', marginBottom: '16px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)',
+                      color: 'var(--green)'
+                    }}>
+                      <Phone size={24} />
+                    </div>
+                    <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#fff', marginBottom: '8px' }}>
+                      Start Chat Simulation
+                    </h3>
+                    <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '24px', maxWidth: '320px' }}>
+                      Test conversation logic, data capture, urgency flags, and Google Calendar tool calling.
+                    </p>
+                    <button
+                      id="start-simulation-btn"
+                      onClick={startConversation}
+                      className="btn-primary"
+                      style={{ justifyContent: 'center', gap: '8px', fontSize: '13px', padding: '10px 24px' }}
+                    >
+                      <Phone size={14} /> Start Call Simulation
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {messages.map(msg => (
+                      <div
+                        key={msg.id}
+                        style={{ display: 'flex', gap: '10px', flexDirection: msg.role === 'user' ? 'row-reverse' : 'row' }}
+                      >
+                        <div style={{
+                          width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: msg.role === 'user' ? 'var(--green)' : 'var(--bg-surface)',
+                          border: msg.role === 'user' ? 'none' : '1px solid var(--border)',
+                          color: msg.role === 'user' ? '#000' : '#fff'
+                        }}>
+                          {msg.role === 'user' ? <User size={13} /> : <Bot size={13} />}
+                        </div>
+                        <div style={{
+                          maxWidth: '80%',
+                          padding: '10px 14px',
+                          borderRadius: msg.role === 'user' ? '12px 2px 12px 12px' : '2px 12px 12px 12px',
+                          background: msg.role === 'user' ? 'var(--green)' : 'var(--bg-inset)',
+                          border: msg.role === 'user' ? 'none' : '1px solid var(--border-subtle)',
+                          color: msg.role === 'user' ? '#000' : '#fff',
+                          fontSize: '13px',
+                          lineHeight: 1.5
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <p style={{ fontSize: '9px', fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.6 }}>
+                              {msg.role === 'user' ? 'Caller' : 'AI Assistant'}
+                            </p>
+                            {msg.role === 'assistant' && !msg.isLoading && (
+                              <button
+                                onClick={() => speakAssistantText(msg.content, selectedWorkflow?.language)}
+                                style={{ background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px' }}
+                                title="Listen to spoken audio"
+                              >
+                                <Volume2 size={11} /> Speak
+                              </button>
+                            )}
+                          </div>
+                          {msg.isLoading ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '2px 0' }}>
+                              <div className="typing-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--green)' }} />
+                              <div className="typing-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--green)' }} />
+                              <div className="typing-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--green)' }} />
+                            </div>
+                          ) : msg.content}
+                        </div>
+                      </div>
+                    ))}
+                    <div ref={messagesEndRef} />
+                  </>
+                )}
+              </div>
+
+              {/* Input Bar in Chat Mode */}
+              {started && (
+                <div style={{
+                  padding: '14px 20px',
+                  borderTop: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-elevated)'
+                }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      id="simulator-message-input"
+                      ref={inputRef}
+                      type="text"
+                      className="input-field"
+                      style={{ flex: 1, fontSize: '13px', padding: '9px 12px' }}
+                      placeholder={isHindi ? 'यहाँ टाइप करें... (e.g. कल शाम 4 बजे अपॉइंटमेंट चाहिए)' : 'Type your reply... (e.g. Schedule callback tomorrow at 4 PM)'}
+                      value={input}
+                      onChange={e => setInput(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && !loading && sendMessage()}
+                      disabled={loading}
+                      autoFocus
+                    />
+                    <button
+                      id="send-message-btn"
+                      onClick={() => sendMessage()}
+                      disabled={!input.trim() || loading}
+                      className="btn-primary"
+                      style={{ padding: '9px 14px', flexShrink: 0 }}
+                    >
+                      <Send size={14} />
+                    </button>
+                  </div>
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                    {isHindi ? 'हिंदी और English दोनों में बात कर सकते हैं' : 'Try: "Book appointment tomorrow 4PM" or "Track order ORD-101"'} &nbsp;&middot;&nbsp; 🤖 Google Gemini Tool Calling
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
