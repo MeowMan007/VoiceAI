@@ -354,35 +354,36 @@ function SimulatorContent() {
         toast.error(errMsg, { duration: 5000 })
       })
 
-      const bizName = (selectedWorkflow.business as { name: string })?.name || 'our business'
-      const greeting = selectedWorkflow.greeting.replace(/\[Business Name\]/g, bizName)
-      const lang = selectedWorkflow.language === 'hi' ? 'hi-IN' : 'en-US'
-      const isHindi = selectedWorkflow.language === 'hi'
+      const assistantId = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID || ''
 
-      await (vapi.start as (assistant: unknown) => Promise<unknown>)({
-        name: `${bizName} Voice Assistant`,
-        firstMessage: greeting,
-        firstMessageInterruptionsEnabled: false,
-        voice: {
-          provider: 'playht',
-          voiceId: isHindi ? 'hi-IN-NeerjaNeural' : 'jennifer',
-        },
-        transcriber: {
-          provider: 'deepgram',
-          model: 'nova-2',
-          language: lang,
-        },
-        model: {
-          provider: 'openai',
-          model: 'gpt-4o',
-          messages: [{
-            role: 'system',
-            content: isHindi
-              ? `आप ${bizName} के लिए एक AI वॉयस असिस्टेंट हैं। ग्राहक ने मिस्ड कॉल किया था। उनकी मदद करें और जरूरी जानकारी इकट्ठा करें: ${(selectedWorkflow.fields as { label: string }[]).map(f => f.label).join(', ')}। हमेशा हिंदी में बात करें।`
-              : `You are a professional AI voice assistant for ${bizName}. The customer missed a call. Your goal is to help them and collect: ${(selectedWorkflow.fields as { label: string }[]).map(f => f.label).join(', ')}. Be concise, warm, and professional.`
-          }]
-        }
-      })
+      if (assistantId) {
+        await (vapi.start as (assistant: string) => Promise<unknown>)(assistantId)
+      } else {
+        await (vapi.start as (assistant: unknown) => Promise<unknown>)({
+          name: `${bizName} Voice Assistant`,
+          firstMessage: greeting,
+          firstMessageInterruptionsEnabled: false,
+          voice: {
+            provider: 'playht',
+            voiceId: isHindi ? 'hi-IN-NeerjaNeural' : 'jennifer',
+          },
+          transcriber: {
+            provider: 'deepgram',
+            model: 'nova-2',
+            language: lang,
+          },
+          model: {
+            provider: 'openai',
+            model: 'gpt-4o',
+            messages: [{
+              role: 'system',
+              content: isHindi
+                ? `आप ${bizName} के लिए एक AI वॉयस असिस्टेंट हैं। ग्राहक ने मिस्ड कॉल किया था। उनकी मदद करें और जरूरी जानकारी इकट्ठा करें: ${(selectedWorkflow.fields as { label: string }[]).map(f => f.label).join(', ')}। हमेशा हिंदी में बात करें।`
+                : `You are a professional AI voice assistant for ${bizName}. The customer missed a call. Your goal is to help them and collect: ${(selectedWorkflow.fields as { label: string }[]).map(f => f.label).join(', ')}. Be concise, warm, and professional.`
+            }]
+          }
+        })
+      }
 
       setStarted(true)
       setMessages([{ id: uuidv4(), role: 'assistant', content: greeting, timestamp: new Date() }])
