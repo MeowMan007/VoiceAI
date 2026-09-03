@@ -31,31 +31,35 @@ export function formatRelativeTime(dateString: string) {
 }
 
 export function generateSystemPrompt(workflow: {
-  name: string
-  greeting: string
-  closing_message: string
-  language: string
-  fields: Array<{ label: string; key: string; required: boolean; type: string; options?: string[] }>
-  conditions: Array<{ field: string; operator: string; value: string; action: string; action_label: string }>
-  calendar_enabled: boolean
-  business?: { name: string; type: string }
+  name?: string
+  greeting?: string
+  closing_message?: string
+  language?: string
+  fields?: Array<{ label: string; key: string; required: boolean; type: string; options?: string[] }>
+  conditions?: Array<{ field: string; operator: string; value: string; action: string; action_label: string }>
+  calendar_enabled?: boolean
+  business?: { name?: string; type?: string }
 }) {
   const businessName = workflow.business?.name || 'the business'
   const isHindi = workflow.language === 'hi'
 
-  const fieldsDescription = workflow.fields
+  const fieldsDescription = (workflow.fields || [])
     .map(f => `- ${f.label} (${f.required ? 'required' : 'optional'})${f.options ? ': options are ' + f.options.join(', ') : ''}`)
     .join('\n')
 
-  const conditionsDescription = workflow.conditions
+  const conditionsDescription = (workflow.conditions || [])
     .map(c => `- If ${c.field} ${c.operator} "${c.value}": ${c.action_label}`)
     .join('\n')
+
+  const greetingText = (workflow.greeting || 'Hello! Thank you for calling [Business Name]. How can I assist you today?').replace('[Business Name]', businessName)
+
+  const closingText = (workflow.closing_message || 'Thank you for your time. Have a wonderful day!').replace('[Business Name]', businessName)
 
   return `You are a professional AI voice assistant for ${businessName}. Your role is to handle missed calls and collect customer information politely and efficiently.
 
 LANGUAGE: ${isHindi ? 'Respond in Hindi (हिंदी). You can understand both Hindi and English.' : 'Respond in English. You can also understand Hindi if the customer speaks it.'}
 
-GREETING: Start with: "${workflow.greeting.replace('[Business Name]', businessName)}"
+GREETING: Start with: "${greetingText}"
 
 YOUR TASK:
 Collect the following information from the caller through natural conversation:
@@ -82,7 +86,7 @@ Tools available: check_calendar_availability, create_calendar_event, update_cale
 AFTER COLLECTING ALL REQUIRED INFORMATION:
 - Summarize what you've collected
 - Ask if anything needs to be changed
-- Close with: "${workflow.closing_message.replace('[Business Name]', businessName)}"
+- Close with: "${closingText}"
 
 IMPORTANT: 
 - If asked for personal opinions, redirect to the task

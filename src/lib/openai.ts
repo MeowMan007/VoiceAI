@@ -38,7 +38,7 @@ export async function generateChatResponse(
 
         const { GoogleGenerativeAI } = await import('@google/generative-ai')
         const genAI = new GoogleGenerativeAI(geminiKey)
-        const modelName = customModel || 'gemini-1.5-flash'
+        const modelName = customModel || 'gemini-2.5-flash'
         const model = genAI.getGenerativeModel({ model: modelName })
         const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || ''
         const systemInstruction = messages.find(m => m.role === 'system')?.content || ''
@@ -200,7 +200,7 @@ export async function generateSummary(
     try {
       const { GoogleGenerativeAI } = await import('@google/generative-ai')
       const genAI = new GoogleGenerativeAI(geminiKey)
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
       const prompt = `You are a business assistant. Summarize this customer conversation for a ${businessType} business owner in 2-3 concise sentences. Focus on what the customer needed, captured details, and priority.\n\nConversation:\n${transcriptText}\n\nCollected Data:\n${JSON.stringify(collectedData, null, 2)}`
       const result = await model.generateContent(prompt)
       return result.response.text() || 'Customer called and left details.'
