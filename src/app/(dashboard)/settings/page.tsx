@@ -17,6 +17,9 @@ interface BusinessSettings {
   dailyEmailDigest: boolean
   calendarSync: boolean
   deliveryApiSync: boolean
+  deepgramApiKey: string
+  elevenlabsApiKey: string
+  openaiApiKey: string
   vapiPublicKey: string
   vapiAssistantId: string
 }
@@ -31,6 +34,9 @@ const DEFAULT_SETTINGS: BusinessSettings = {
   dailyEmailDigest: true,
   calendarSync: true,
   deliveryApiSync: true,
+  deepgramApiKey: '',
+  elevenlabsApiKey: '',
+  openaiApiKey: '',
   vapiPublicKey: '',
   vapiAssistantId: ''
 }
@@ -350,11 +356,11 @@ function SettingsContent() {
         </div>
       </div>
 
-      {/* ── Section 4.5: Vapi API Keys ─────────────────────── */}
+      {/* ── Section 4.5: Voice AI & LLM API Keys ─────────────────────── */}
       <div className="settings-group">
-        <h2 className="settings-group-title">Vapi Voice API Keys</h2>
+        <h2 className="settings-group-title">Voice AI &amp; LLM Keys (Prompt Specified Stack)</h2>
         <div className="settings-section">
-          {/* Public Key */}
+          {/* Deepgram STT */}
           <div className="settings-row flex-col items-start gap-2">
             <div className="flex items-start gap-3.5 w-full">
               <div
@@ -364,62 +370,90 @@ function SettingsContent() {
                 <Volume2 size={15} style={{ color: 'var(--green)' }} />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-medium text-white">Vapi Public Key</p>
+                <p className="text-[13px] font-medium text-white">Deepgram API Key (Speech-to-Text)</p>
                 <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-                  Found in <a href="https://dashboard.vapi.ai" target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>dashboard.vapi.ai</a> → Org Settings → API Keys → <strong style={{color:'#fff'}}>Public Key</strong>. Starts with a UUID-like string.
+                  Used for browser microphone speech recognition. Get $200 free credit at <a href="https://console.deepgram.com" target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>deepgram.com</a>.
                 </p>
               </div>
             </div>
             <div className="w-full pl-[44px]">
               <input
-                id="vapi-public-key"
-                type="text"
+                id="deepgram-api-key"
+                type="password"
                 className="input-field text-xs py-2 font-mono w-full"
-                placeholder="e.g. 0194a3b1-..."
-                value={settings.vapiPublicKey}
-                onChange={e => setSettings({ ...settings, vapiPublicKey: e.target.value })}
+                placeholder="e.g. 5a1b..."
+                value={settings.deepgramApiKey}
+                onChange={e => setSettings({ ...settings, deepgramApiKey: e.target.value })}
               />
-              {settings.vapiPublicKey.startsWith('AQ.') && (
-                <p className="text-[11px] mt-1" style={{ color: '#f59e0b' }}>
-                  ⚠️ This looks like a <strong>Private Key</strong> (starts with AQ.). The Public Key is different — it&apos;s a UUID found under API Keys in your Vapi dashboard.
-                </p>
-              )}
             </div>
           </div>
 
-          {/* Assistant ID (optional) */}
+          {/* ElevenLabs TTS */}
           <div className="settings-row flex-col items-start gap-2">
             <div className="flex items-start gap-3.5 w-full">
-              <div className="w-8 h-8 shrink-0" />
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
+                style={{ background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)' }}
+              >
+                <Volume2 size={15} style={{ color: '#a78bfa' }} />
+              </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-medium text-white">Vapi Assistant ID <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></p>
+                <p className="text-[13px] font-medium text-white">ElevenLabs API Key (Text-to-Speech)</p>
                 <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-                  If you have a pre-built assistant in Vapi, paste its ID here. Leave blank to use the auto-generated assistant from your workflow settings.
+                  Used for neural voice streaming (English &amp; Hindi). 10,000 chars/month free at <a href="https://elevenlabs.io" target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>elevenlabs.io</a>.
                 </p>
               </div>
             </div>
             <div className="w-full pl-[44px]">
               <input
-                id="vapi-assistant-id"
-                type="text"
+                id="elevenlabs-api-key"
+                type="password"
                 className="input-field text-xs py-2 font-mono w-full"
-                placeholder="e.g. 6d6477cf-18a1-473a-a2e1-29f51ffcad95"
-                value={settings.vapiAssistantId}
-                onChange={e => setSettings({ ...settings, vapiAssistantId: e.target.value })}
+                placeholder="e.g. sk_..."
+                value={settings.elevenlabsApiKey}
+                onChange={e => setSettings({ ...settings, elevenlabsApiKey: e.target.value })}
+              />
+            </div>
+          </div>
+
+          {/* OpenAI API Key */}
+          <div className="settings-row flex-col items-start gap-2">
+            <div className="flex items-start gap-3.5 w-full">
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
+                style={{ background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)' }}
+              >
+                <Volume2 size={15} style={{ color: '#60a5fa' }} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-medium text-white">OpenAI API Key (GPT-4o &amp; Tool Calling)</p>
+                <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                  Used for conversational reasoning and Google Calendar / Delivery API function calls.
+                </p>
+              </div>
+            </div>
+            <div className="w-full pl-[44px]">
+              <input
+                id="openai-api-key"
+                type="password"
+                className="input-field text-xs py-2 font-mono w-full"
+                placeholder="e.g. sk-proj-..."
+                value={settings.openaiApiKey}
+                onChange={e => setSettings({ ...settings, openaiApiKey: e.target.value })}
               />
             </div>
           </div>
 
           <div className="pl-[44px]">
             <button
-              id="save-vapi-keys-btn"
+              id="save-voice-keys-btn"
               onClick={() => {
                 localStorage.setItem('voiceai_business_settings', JSON.stringify(settings))
-                toast.success('Vapi keys saved — you can now start a live voice call in the Simulator')
+                toast.success('Voice AI & LLM keys saved successfully!')
               }}
               className="btn-primary text-xs py-2 px-4"
             >
-              <Save size={13} /> Save Vapi Keys
+              <Save size={13} /> Save Voice AI Keys
             </button>
           </div>
         </div>

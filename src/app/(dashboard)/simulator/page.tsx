@@ -7,10 +7,13 @@ import toast from 'react-hot-toast'
 import {
   Send, Mic, RefreshCw, Save, Phone, PhoneOff,
   Globe, Sparkles, Calendar, Volume2, CheckCircle2,
-  User, Bot, Radio
+  User, Bot
 } from 'lucide-react'
 import { v4 as uuidv4 } from 'uuid'
 import { cn } from '@/lib/utils'
+import dynamic from 'next/dynamic'
+
+const ElevenLabsVoiceSimulator = dynamic(() => import('@/components/ElevenLabsVoiceSimulator'), { ssr: false })
 
 // Built-in demonstration workflows — English + Hindi
 const DEMO_WORKFLOWS: Workflow[] = [
@@ -256,13 +259,9 @@ function SimulatorContent() {
   const [collectedData, setCollectedData] = useState<Record<string, unknown>>({})
   const [toolLogs, setToolLogs] = useState<string[]>([])
 
-  // Vapi voice state
-  const [vapiConnected, setVapiConnected] = useState(false)
-  const [vapiSpeaking, setVapiSpeaking] = useState(false)
-  const [vapiLoading, setVapiLoading] = useState(false)
-  const [volumeLevel, setVolumeLevel] = useState(0)
-  const [vapiKeyAvailable, setVapiKeyAvailable] = useState(false)
-  const vapiRef = useRef<InstanceType<typeof import('@vapi-ai/web').default> | null>(null)
+  // Voice mode state (ElevenLabs TTS + Deepgram STT)
+  const [voiceMode, setVoiceMode] = useState(false)
+  const [voiceStarted, setVoiceStarted] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -298,162 +297,6 @@ function SimulatorContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Read Vapi key from localStorage or env on mount
-  useEffect(() => {
-    const { key } = getVapiConfig()
-    setVapiKeyAvailable(!!key)
-  }, [])
-
-  // Cleanup Vapi on unmount
-  useEffect(() => {
-    return () => {
-      if (vapiRef.current) {
-        vapiRef.current.stop()
-      }
-    }
-  }, [])
-
-  const startVapiCall = useCallback(async () => {
-    const { key: vapiKey, assistantId: vapiAssistantId } = getVapiConfig()
-    if (!selectedWorkflow || !vapiKey) {
-      toast.error('Vapi Public Key not configured. Go to Settings → Integrations to add it.')
-      return
-    }
-    setVapiLoading(true)
-
-    try {
-      const { default: Vapi } = await import('@vapi-ai/web')
-      const vapi = new Vapi(vapiKey)
-      vapiRef.current = vapi
-
-      vapi.on('call-start', () => {
-        setVapiConnected(true)
-        setVapiLoading(false)
-        setStarted(true)
-        toast.success('Voice call connected')
-      })
-
-      vapi.on('call-end', () => {
-        setVapiConnected(false)
-        setVapiSpeaking(false)
-        setVolumeLevel(0)
-        toast('Voice call ended')
-      })
-
-      vapi.on('speech-start', () => setVapiSpeaking(true))
-      vapi.on('speech-end', () => setVapiSpeaking(false))
-
-      vapi.on('volume-level', (vol: number) => setVolumeLevel(vol))
-
-      vapi.on('message', (msg: Record<string, unknown>) => {
-        if (msg.type === 'transcript') {
-          const transcript = msg as { type: string; role: string; transcript: string; transcriptType?: string }
-          if (transcript.transcriptType === 'final') {
-            const role = transcript.role === 'assistant' ? 'assistant' : 'user'
-            setMessages(prev => [...prev, {
-              id: uuidv4(),
-              role,
-              content: transcript.transcript,
-              timestamp: new Date()
-            }])
-          }
-        }
-
-        if (msg.type === 'tool-calls') {
-          const toolName = (msg as { type: string; toolCallList?: { function: { name: string } }[] })
-            .toolCallList?.[0]?.function?.name
-          if (toolName) {
-            setToolLogs(prev => [...prev, `Tool: ${toolName.replace(/_/g, ' ')}`])
-          }
-        }
-      })
-
-      const bizName = (selectedWorkflow.business as { name: string })?.name || 'our business'
-      const greeting = selectedWorkflow.greeting.replace(/\[Business Name\]/g, bizName)
-      const lang = selectedWorkflow.language === 'hi' ? 'hi-IN' : 'en-US'
-      const isHindi = selectedWorkflow.language === 'hi'
-
-      vapi.on('error', (err: unknown) => {
-        console.error('Vapi error:', err)
-        setVapiLoading(false)
-        let errMsg = 'Voice connection error. Please verify your Vapi Public Key.'
-        if (typeof err === 'string') {
-          errMsg = err
-        } else if (err && typeof err === 'object') {
-          const errObj = err as Record<string, unknown>
-          if (typeof errObj.message === 'string') {
-            errMsg = errObj.message
-          } else if (errObj.error && typeof errObj.error === 'object') {
-            const nested = errObj.error as Record<string, unknown>
-            if (typeof nested.message === 'string') {
-              errMsg = nested.message
-            } else {
-              errMsg = JSON.stringify(nested)
-            }
-          } else {
-            errMsg = JSON.stringify(err)
-          }
-        }
-        toast.error(errMsg, { duration: 5000 })
-      })
-
-      if (vapiAssistantId && vapiAssistantId !== vapiKey) {
-        await (vapi.start as (assistant: string) => Promise<unknown>)(vapiAssistantId)
-      } else {
-        await (vapi.start as (assistant: unknown) => Promise<unknown>)({
-          name: `${bizName} Voice Assistant`,
-          firstMessage: greeting,
-          firstMessageInterruptionsEnabled: false,
-          voice: {
-            provider: 'playht',
-            voiceId: isHindi ? 'hi-IN-NeerjaNeural' : 'jennifer',
-          },
-          transcriber: {
-            provider: 'deepgram',
-            model: 'nova-2',
-            language: lang,
-          },
-          model: {
-            provider: 'openai',
-            model: 'gpt-4o',
-            messages: [{
-              role: 'system',
-              content: isHindi
-                ? `आप ${bizName} के लिए एक AI वॉयस असिस्टेंट हैं। ग्राहक ने मिस्ड कॉल किया था। उनकी मदद करें और जरूरी जानकारी इकट्ठा करें: ${(selectedWorkflow.fields as { label: string }[]).map(f => f.label).join(', ')}। हमेशा हिंदी में बात करें।`
-                : `You are a professional AI voice assistant for ${bizName}. The customer missed a call. Your goal is to help them and collect: ${(selectedWorkflow.fields as { label: string }[]).map(f => f.label).join(', ')}. Be concise, warm, and professional.`
-            }]
-          }
-        })
-      }
-
-      setStarted(true)
-      setMessages([{ id: uuidv4(), role: 'assistant', content: greeting, timestamp: new Date() }])
-    } catch (err: unknown) {
-      console.error('Failed to start Vapi call:', err)
-      setVapiLoading(false)
-      let msg = 'Could not connect voice call. Check your Vapi Public Key.'
-      if (err instanceof Error) {
-        msg = err.message
-      } else if (typeof err === 'string') {
-        msg = err
-      } else if (err && typeof err === 'object') {
-        const anyErr = err as Record<string, unknown>
-        if (typeof anyErr.message === 'string') msg = anyErr.message
-        else msg = JSON.stringify(err)
-      }
-      toast.error(msg, { duration: 5000 })
-    }
-  }, [selectedWorkflow])
-
-  const stopVapiCall = useCallback(async () => {
-    if (vapiRef.current) {
-      await vapiRef.current.stop()
-      vapiRef.current = null
-    }
-    setVapiConnected(false)
-    setVapiSpeaking(false)
-    setVolumeLevel(0)
-  }, [])
 
   const startConversation = () => {
     if (!selectedWorkflow) { toast.error('Select a workflow first'); return }
@@ -558,7 +401,8 @@ function SimulatorContent() {
   }
 
   const resetConversation = async () => {
-    await stopVapiCall()
+    setVoiceMode(false)
+    setVoiceStarted(false)
     setMessages([])
     setStarted(false)
     setSaved(false)
@@ -578,7 +422,7 @@ function SimulatorContent() {
             <span className="badge badge-contacted">Live Tester</span>
           </div>
           <p className="page-subtitle">
-            Simulate missed-call AI conversations — text or real voice (Vapi) — with Google Calendar scheduling and tool calling
+            Simulate missed-call AI conversations — text or real voice (Deepgram + ElevenLabs) — with Google Calendar scheduling and tool calling
           </p>
         </div>
         {started && (
@@ -772,8 +616,8 @@ function SimulatorContent() {
                   )}
                 </div>
                 <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  {vapiConnected
-                    ? 'Live Voice Call Active (Vapi)'
+                  {voiceMode
+                    ? 'Live Voice Call Active'
                     : started
                       ? 'AI Text Simulator Active'
                       : 'Ready to simulate'}
@@ -781,20 +625,6 @@ function SimulatorContent() {
                 </p>
               </div>
             </div>
-
-            {/* Waveform when voice active */}
-            {vapiConnected && (
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '24px' }}>
-                {[0.4, 0.7, 1.0, 0.8, 0.5].map((base, i) => (
-                  <div key={i} className="wave-bar" style={{
-                    height: `${Math.max(4, (vapiSpeaking ? base : 0.3) * 20 + volumeLevel * 15)}px`
-                  }} />
-                ))}
-                <span style={{ fontSize: '10px', color: 'var(--green)', marginLeft: '6px', fontWeight: 600 }}>
-                  {vapiSpeaking ? 'Speaking' : 'Listening'}
-                </span>
-              </div>
-            )}
           </div>
 
           {/* Messages area */}
@@ -825,27 +655,37 @@ function SimulatorContent() {
                     <Phone size={14} /> Start Text Simulation
                   </button>
                   <button
-                    onClick={startVapiCall}
-                    disabled={vapiLoading}
+                    id="start-voice-btn"
+                    onClick={() => {
+                      setVoiceMode(true)
+                      setVoiceStarted(true)
+                      setStarted(true)
+                    }}
                     className="btn-secondary"
                     style={{ justifyContent: 'center', gap: '8px', fontSize: '13px', padding: '10px' }}
                   >
-                    {vapiLoading
-                      ? <><Radio size={14} style={{ color: 'var(--green)' }} /> Connecting Voice...</>
-                      : <><Volume2 size={14} style={{ color: 'var(--green)' }} /> Start Live Voice Call (Vapi)</>
-                    }
+                    <Mic size={14} style={{ color: 'var(--green)' }} /> Start Live Voice Call
                   </button>
-                  {!vapiKeyAvailable && (
-                    <p style={{ fontSize: '11px', color: '#f59e0b', textAlign: 'center' }}>
-                      ⚠️ No Vapi key found. Go to{' '}
-                      <a href="/settings" style={{ color: 'var(--green)', textDecoration: 'underline' }}>Settings</a>{' '}
-                      → Integrations to add your Vapi Public Key.
-                    </p>
-                  )}
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center' }}>
+                    Voice: Deepgram STT + ElevenLabs TTS — add API keys to .env.local
+                  </p>
                 </div>
               </div>
             ) : (
               <>
+                {/* Voice mode — ElevenLabs + Deepgram */}
+                {voiceMode && voiceStarted && selectedWorkflow && (
+                  <ElevenLabsVoiceSimulator
+                    workflow={selectedWorkflow}
+                    messages={messages}
+                    onMessage={msg => setMessages(prev => [...prev, msg])}
+                    onToolLog={log => setToolLogs(prev => [...prev, log])}
+                    onEnd={() => {
+                      setVoiceMode(false)
+                      setVoiceStarted(false)
+                    }}
+                  />
+                )}
                 {messages.map(msg => (
                   <div
                     key={msg.id}
@@ -888,8 +728,8 @@ function SimulatorContent() {
             )}
           </div>
 
-          {/* Input bar */}
-          {started && !vapiConnected && (
+          {/* Text input bar — hide in voice mode */}
+          {started && !voiceMode && (
             <div style={{
               padding: '14px 20px',
               borderTop: '1px solid var(--border-subtle)',
@@ -925,29 +765,6 @@ function SimulatorContent() {
             </div>
           )}
 
-          {/* Voice mode end call bar */}
-          {vapiConnected && (
-            <div style={{
-              padding: '14px 20px',
-              borderTop: '1px solid var(--border-subtle)',
-              background: 'var(--bg-elevated)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <button
-                onClick={stopVapiCall}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '8px',
-                  padding: '10px 24px', borderRadius: '99px',
-                  background: '#ef4444', color: '#fff', border: 'none',
-                  fontSize: '13px', fontWeight: 600, cursor: 'pointer'
-                }}
-              >
-                <PhoneOff size={15} /> End Voice Call
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </div>
