@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
+import { demoAuth } from '@/lib/demo-auth'
 import toast from 'react-hot-toast'
 import { Mic, Eye, EyeOff, Loader2 } from 'lucide-react'
 
@@ -12,23 +12,18 @@ export default function RegisterPage() {
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
 
-  const handleRegister = async (e: React.FormEvent) => {
+  const handleRegister = (e: React.FormEvent) => {
     e.preventDefault()
-    if (password.length < 6) {
-      toast.error('Password must be at least 6 characters')
-      return
-    }
     setLoading(true)
-    const { error } = await supabase.auth.signUp({ email, password })
+    const { error } = demoAuth.register(email, password)
     if (error) {
-      toast.error(error.message)
+      toast.error(error)
+      setLoading(false)
     } else {
-      toast.success('Account created! Check your email to confirm.')
-      router.push('/login')
+      toast.success('Account created! Welcome to VoiceAI 🎉')
+      router.push('/')
     }
-    setLoading(false)
   }
 
   return (

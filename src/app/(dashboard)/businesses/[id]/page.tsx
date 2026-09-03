@@ -1,10 +1,11 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { localDB } from '@/lib/local-db'
+import { demoAuth } from '@/lib/demo-auth'
 import { BUSINESS_TYPES, BusinessType, Language } from '@/types'
 import toast from 'react-hot-toast'
-import { ArrowLeft, Loader2, CheckCircle2, Building2 } from 'lucide-react'
+import { ArrowLeft, Loader2, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
@@ -12,7 +13,6 @@ export default function BusinessFormPage() {
   const router = useRouter()
   const params = useParams()
   const isNew = params?.id === 'new'
-  const supabase = createClient()
 
   const [form, setForm] = useState({
     name: '',
@@ -25,52 +25,38 @@ export default function BusinessFormPage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    async function loadBusiness() {
-      if (!isNew && params?.id) {
-        setLoading(true)
-        try {
-          const { data } = await supabase.from('businesses').select('*').eq('id', params.id as string).single()
-          if (data) {
-            setForm({
-              name: data.name,
-              type: data.type,
-              phone: data.phone || '',
-              description: data.description || '',
-              language: data.language
-            })
-          }
-        } catch {
-          // ignore
-        } finally {
-          setLoading(false)
-        }
+    if (!isNew && params?.id) {
+      setLoading(true)
+      const biz = localDB.getBusiness(params.id as string)
+      if (biz) {
+        setForm({
+          name: biz.name,
+          type: biz.type,
+          phone: biz.phone || '',
+          description: biz.description || '',
+          language: biz.language
+        })
       }
+      setLoading(false)
     }
-    loadBusiness()
   }, [params?.id])
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
 
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      const ownerId = user?.id || 'demo-owner'
+    const user = demoAuth.getUser()
+    const ownerId = user?.id || 'demo-owner'
 
-      if (isNew) {
-        await supabase.from('businesses').insert({ ...form, owner_id: ownerId })
-        toast.success('Business profile created!')
-      } else {
-        await supabase.from('businesses').update(form).eq('id', params?.id as string)
-        toast.success('Business profile updated!')
-      }
-      router.push('/businesses')
-    } catch {
-      toast.success('Saved profile!')
-      router.push('/businesses')
-    } finally {
-      setSaving(false)
+    if (isNew) {
+      localDB.saveBusiness({ ...form, owner_id: ownerId })
+      toast.success('Business profile created!')
+    } else {
+      localDB.updateBusiness(params?.id as string, form)
+      toast.success('Business profile updated!')
     }
+    router.push('/businesses')
+    setSaving(false)
   }
 
   if (loading) {

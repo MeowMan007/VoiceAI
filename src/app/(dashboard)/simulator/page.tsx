@@ -245,9 +245,10 @@ function getVapiConfig() {
   return { key, assistantId }
 }
 
+import { localDB } from '@/lib/local-db'
+
 function SimulatorContent() {
   const searchParams = useSearchParams()
-  const supabase = createClient()
 
   const [workflows, setWorkflows] = useState<Workflow[]>([])
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null)
@@ -267,30 +268,17 @@ function SimulatorContent() {
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    const fetchWorkflows = async () => {
-      try {
-        const { data } = await supabase
-          .from('workflows')
-          .select('*, business:businesses(name, type)')
-          .eq('is_active', true)
-          .order('created_at', { ascending: false })
+    const localWfs = localDB.getWorkflowsWithBusiness()
+    const combined = (localWfs && localWfs.length > 0) ? (localWfs as unknown as Workflow[]) : DEMO_WORKFLOWS
+    setWorkflows(combined)
 
-        const combined = (data && data.length > 0) ? [...data, ...DEMO_WORKFLOWS] : DEMO_WORKFLOWS
-        setWorkflows(combined as Workflow[])
-
-        const wfId = searchParams.get('workflow')
-        if (wfId) {
-          const found = combined.find(w => w.id === wfId)
-          setSelectedWorkflow((found || combined[0]) as Workflow)
-        } else {
-          setSelectedWorkflow(combined[0] as Workflow)
-        }
-      } catch {
-        setWorkflows(DEMO_WORKFLOWS)
-        setSelectedWorkflow(DEMO_WORKFLOWS[0])
-      }
+    const wfId = searchParams.get('workflow')
+    if (wfId) {
+      const found = combined.find(w => w.id === wfId)
+      setSelectedWorkflow((found || combined[0]) as Workflow)
+    } else {
+      setSelectedWorkflow(combined[0] as Workflow)
     }
-    fetchWorkflows()
   }, [searchParams])
 
   useEffect(() => {
@@ -378,7 +366,26 @@ function SimulatorContent() {
   const saveConversation = async () => {
     if (!selectedWorkflow || messages.length < 2) { toast.error('Have a conversation first'); return }
     try {
-      const res = await fetch('/api/chat', {
+      const userMsg = messages.find(m => m.role === 'user')?.content || 'Customer Inquiry'
+      const callerName = (collectedData.caller_name as string) || (collectedData.patient_name as string) || 'Demo Caller'
+      const callerPhone = (collectedData.phone as string) || (collectedData.caller_phone as string) || '+91 98765 00000'
+
+      localDB.saveCall({
+        business_id: selectedWorkflow.business_id,
+        workflow_id: selectedWorkflow.id,
+        caller_name: callerName,
+        caller_phone: callerPhone,
+        status: 'completed',
+        intent: userMsg.slice(0, 50),
+        summary: `Customer called: "${userMsg.slice(0, 60)}". Collected: ${JSON.stringify(collectedData)}`,
+        urgency: 'normal',
+        follow_up_status: 'pending',
+        transcript: messages.filter(m => !m.isLoading).map(m => ({ role: m.role, content: m.content, timestamp: String(m.timestamp) })),
+        collected_data: collectedData as Record<string, string>,
+        language_used: selectedWorkflow.language || 'en'
+      })
+
+      fetch('/api/chat', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -386,14 +393,10 @@ function SimulatorContent() {
           workflow: selectedWorkflow,
           calledData: collectedData
         })
-      })
-      if (res.ok) {
-        setSaved(true)
-        toast.success('Call recorded & saved to dashboard!')
-      } else {
-        setSaved(true)
-        toast.success('Simulation complete (saved locally)')
-      }
+      }).catch(() => {})
+
+      setSaved(true)
+      toast.success('Call recorded & saved to dashboard!')
     } catch {
       setSaved(true)
       toast.success('Simulation saved')

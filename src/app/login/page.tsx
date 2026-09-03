@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
+import { demoAuth } from '@/lib/demo-auth'
 import toast from 'react-hot-toast'
 import { Mic, Eye, EyeOff, Loader2 } from 'lucide-react'
 
@@ -12,19 +12,17 @@ export default function LoginPage() {
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { error } = demoAuth.login(email, password)
     if (error) {
-      toast.error(error.message)
+      toast.error(error)
+      setLoading(false)
     } else {
       router.push('/')
-      router.refresh()
     }
-    setLoading(false)
   }
 
   return (

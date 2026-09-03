@@ -1,178 +1,31 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { localDB } from '@/lib/local-db'
 import { Call, Business, CallStatus } from '@/types'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { PhoneCall, Search, Download, ChevronRight } from 'lucide-react'
 import { formatDate, formatRelativeTime, cn } from '@/lib/utils'
 
-const SEED_CALLS: Call[] = [
-  {
-    id: 'call-seed-1',
-    business_id: 'biz-1',
-    workflow_id: 'wf-1',
-    caller_name: 'Rahul Sharma',
-    caller_phone: '+91 98765 43210',
-    status: 'in_progress',
-    intent: 'Order Custom Chocolate Truffle Cake',
-    summary: 'Customer called to order a 1kg chocolate truffle cake for a birthday tomorrow. Delivery requested by 4:00 PM.',
-    urgency: 'urgent',
-    follow_up_status: 'pending',
-    transcript: [
-      { role: 'assistant', content: "Hello, thanks for calling Sweet Delights Bakery. How can I assist you with your order today?", timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString() },
-      { role: 'user', content: "Hi, I need to order a 1kg chocolate truffle cake urgently for tomorrow afternoon.", timestamp: new Date(Date.now() - 1000 * 60 * 14).toISOString() }
-    ],
-    collected_data: { flavour: 'Chocolate Truffle', weight: '1kg', required_date: 'Tomorrow' },
-    language_used: 'en',
-    created_at: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
-    updated_at: new Date().toISOString(),
-    business: {
-      id: 'biz-1',
-      owner_id: 'demo',
-      name: 'Sweet Delights Bakery',
-      type: 'cake_shop',
-      language: 'en',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  },
-  {
-    id: 'call-seed-2',
-    business_id: 'biz-2',
-    workflow_id: 'wf-2',
-    caller_name: 'Anita Verma',
-    caller_phone: '+91 98111 22334',
-    status: 'completed',
-    intent: 'Doctor Appointment Consultation',
-    summary: 'Patient requested appointment callback for tomorrow at 4:00 PM. Verified calendar slot and scheduled follow-up.',
-    urgency: 'normal',
-    follow_up_status: 'resolved',
-    calendar_event_id: 'cal_event_98231',
-    calendar_event_url: 'https://calendar.google.com',
-    transcript: [
-      { role: 'assistant', content: "Hello, you have reached Apex Family Clinic. Would you like to book an appointment or check timings?", timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString() },
-      { role: 'user', content: "I would like to book an appointment with Dr. Sharma tomorrow around 4 PM please.", timestamp: new Date(Date.now() - 1000 * 60 * 44).toISOString() }
-    ],
-    collected_data: { patient_name: 'Anita Verma', doctor_preference: 'Dr. Sharma', preferred_time: '16:00' },
-    language_used: 'en',
-    created_at: new Date(Date.now() - 1000 * 60 * 50).toISOString(),
-    updated_at: new Date().toISOString(),
-    business: {
-      id: 'biz-2',
-      owner_id: 'demo',
-      name: 'Apex Family Clinic',
-      type: 'clinic',
-      language: 'en',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  },
-  {
-    id: 'call-seed-3',
-    business_id: 'biz-3',
-    workflow_id: 'wf-3',
-    caller_name: 'Vikram Singh',
-    caller_phone: '+91 99887 76655',
-    status: 'completed',
-    intent: 'Package Status Tracking (ORD-101)',
-    summary: 'Caller inquired about tracking status for ORD-101. Delivery API queried: Package is out for delivery with courier.',
-    urgency: 'normal',
-    follow_up_status: 'contacted',
-    transcript: [
-      { role: 'assistant', content: "Hello, SwiftGo Express Logistics assistant here. Do you need a new dispatch or status check?", timestamp: new Date(Date.now() - 1000 * 3600 * 2).toISOString() },
-      { role: 'user', content: "Can you check where my package ORD-101 is right now?", timestamp: new Date(Date.now() - 1000 * 3600 * 2 + 10000).toISOString() }
-    ],
-    collected_data: { order_id: 'ORD-101', status: 'Out for Delivery' },
-    language_used: 'en',
-    created_at: new Date(Date.now() - 1000 * 3600 * 3).toISOString(),
-    updated_at: new Date().toISOString(),
-    business: {
-      id: 'biz-3',
-      owner_id: 'demo',
-      name: 'SwiftGo Express Logistics',
-      type: 'delivery',
-      language: 'en',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  },
-  {
-    id: 'call-seed-4',
-    business_id: 'biz-4',
-    workflow_id: 'wf-4',
-    caller_name: 'Dinesh Kumar',
-    caller_phone: '+91 97654 32100',
-    status: 'new',
-    intent: 'Birthday Party Catering Enquiry',
-    summary: 'Customer called to enquire about custom 2kg vanilla cake and catering options for tomorrow evening.',
-    urgency: 'normal',
-    follow_up_status: 'pending',
-    transcript: [
-      { role: 'assistant', content: "Hello, welcome to Royal Bakery. Are you calling to place a new order or ask a question?", timestamp: new Date(Date.now() - 1000 * 3600 * 5).toISOString() },
-      { role: 'user', content: "Yes, I need information on ordering a 2kg cake for tomorrow evening.", timestamp: new Date(Date.now() - 1000 * 3600 * 5 + 15000).toISOString() }
-    ],
-    collected_data: { weight: '2kg', flavour: 'Vanilla' },
-    language_used: 'en',
-    created_at: new Date(Date.now() - 1000 * 3600 * 6).toISOString(),
-    updated_at: new Date().toISOString(),
-    business: {
-      id: 'biz-4',
-      owner_id: 'demo',
-      name: 'Royal Bakery',
-      type: 'cake_shop',
-      language: 'en',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  }
-]
-
 export default function CallsPage() {
-  const [calls, setCalls] = useState<Call[]>(SEED_CALLS)
-  const [businesses, setBusinesses] = useState<Business[]>([])
+  const [calls, setCalls] = useState<(Call & { business: Business | null })[]>([])
   const [search, setSearch] = useState('')
   const [selectedBusiness, setSelectedBusiness] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
   const [selectedUrgency, setSelectedUrgency] = useState<string>('all')
-  const supabase = createClient()
 
-  const fetchCallsAndBusinesses = async () => {
-    try {
-      const [{ data: callsData }, { data: bizData }] = await Promise.all([
-        supabase.from('calls').select('*, business:businesses(name, type)').order('created_at', { ascending: false }),
-        supabase.from('businesses').select('*')
-      ])
-
-      if (callsData && callsData.length > 0) {
-        setCalls(callsData as Call[])
-      } else {
-        setCalls(SEED_CALLS)
-      }
-      if (bizData && bizData.length > 0) {
-        setBusinesses(bizData)
-      }
-    } catch {
-      setCalls(SEED_CALLS)
-    }
-  }
+  const businesses = useMemo(() => localDB.getBusinesses(), [])
 
   useEffect(() => {
-    fetchCallsAndBusinesses()
+    setCalls(localDB.getCallsWithBusiness())
   }, [])
 
-  const updateStatus = async (id: string, newStatus: CallStatus, newFollowUp: Call['follow_up_status']) => {
-    try {
-      await supabase
-        .from('calls')
-        .update({ status: newStatus, follow_up_status: newFollowUp })
-        .eq('id', id)
-    } catch {
-      // Demo update
-    }
+  const updateStatus = (id: string, newStatus: CallStatus, newFollowUp: Call['follow_up_status']) => {
+    localDB.updateCall(id, { status: newStatus, follow_up_status: newFollowUp })
     toast.success(`Updated status to ${newFollowUp}`)
     setCalls(prev => prev.map(c => c.id === id ? { ...c, status: newStatus, follow_up_status: newFollowUp } : c))
   }
+
 
   const filteredCalls = useMemo(() => {
     return calls.filter(call => {

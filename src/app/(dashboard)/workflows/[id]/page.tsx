@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { localDB } from '@/lib/local-db'
 import { Business, WorkflowField, WorkflowCondition, WORKFLOW_TEMPLATES, BusinessType, Language } from '@/types'
 import toast from 'react-hot-toast'
 import { ArrowLeft, ArrowRight, Plus, Trash2, Loader2, CheckCircle2, GripVertical, Calendar } from 'lucide-react'
@@ -11,50 +11,13 @@ import { v4 as uuidv4 } from 'uuid'
 
 const STEPS = ['Basic Info', 'Greeting', 'Data Fields', 'Conditions', 'Post Action', 'Review']
 
-const DEFAULT_BUSINESSES: Business[] = [
-  {
-    id: 'biz-seed-1',
-    owner_id: 'demo',
-    name: 'Sweet Delights Bakery',
-    type: 'cake_shop',
-    phone: '+91 98765 43210',
-    description: 'Fresh custom cakes and bakery orders',
-    language: 'en',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: 'biz-seed-2',
-    owner_id: 'demo',
-    name: 'Apex Family Clinic',
-    type: 'clinic',
-    phone: '+91 98111 22334',
-    description: 'Medical clinic and appointment scheduling',
-    language: 'en',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: 'biz-seed-3',
-    owner_id: 'demo',
-    name: 'SwiftGo Express Logistics',
-    type: 'delivery',
-    phone: '+91 99887 76655',
-    description: 'Intra-city express courier service',
-    language: 'en',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  }
-]
-
 export default function WorkflowFormPage() {
   const router = useRouter()
   const params = useParams()
   const isNew = params?.id === 'new'
-  const supabase = createClient()
 
   const [step, setStep] = useState(0)
-  const [businesses, setBusinesses] = useState<Business[]>(DEFAULT_BUSINESSES)
+  const [businesses, setBusinesses] = useState<Business[]>([])
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -73,42 +36,33 @@ export default function WorkflowFormPage() {
   })
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const { data: bizData } = await supabase.from('businesses').select('*')
-        if (bizData && bizData.length > 0) {
-          setBusinesses(bizData)
-          if (isNew) {
-            setForm(f => ({ ...f, business_id: bizData[0].id }))
-            applyTemplate(bizData[0].id, bizData)
-          }
-        } else {
-          setBusinesses(DEFAULT_BUSINESSES)
-        }
-
-        if (!isNew && params?.id) {
-          const { data } = await supabase.from('workflows').select('*').eq('id', params.id as string).single()
-          if (data) {
-            setForm({
-              business_id: data.business_id,
-              name: data.name,
-              trigger: data.trigger,
-              greeting: data.greeting,
-              closing_message: data.closing_message,
-              language: data.language,
-              fields: data.fields || [],
-              conditions: data.conditions || [],
-              post_action: data.post_action,
-              calendar_enabled: data.calendar_enabled,
-              is_active: data.is_active,
-            })
-          }
-        }
-      } catch {
-        setBusinesses(DEFAULT_BUSINESSES)
+    const bizData = localDB.getBusinesses()
+    if (bizData && bizData.length > 0) {
+      setBusinesses(bizData)
+      if (isNew) {
+        setForm(f => ({ ...f, business_id: bizData[0].id }))
+        applyTemplate(bizData[0].id, bizData)
       }
     }
-    fetchData()
+
+    if (!isNew && params?.id) {
+      const data = localDB.getWorkflow(params.id as string)
+      if (data) {
+        setForm({
+          business_id: data.business_id,
+          name: data.name,
+          trigger: data.trigger,
+          greeting: data.greeting,
+          closing_message: data.closing_message,
+          language: data.language,
+          fields: data.fields || [],
+          conditions: data.conditions || [],
+          post_action: data.post_action,
+          calendar_enabled: data.calendar_enabled,
+          is_active: data.is_active,
+        })
+      }
+    }
   }, [params?.id])
 
   const applyTemplate = (businessId: string, currentBusinesses = businesses) => {
@@ -171,27 +125,21 @@ export default function WorkflowFormPage() {
     setForm(f => ({ ...f, conditions: f.conditions.filter(c => c.id !== id) }))
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!form.business_id) { toast.error('Please select a business'); return }
     if (!form.name.trim()) { toast.error('Workflow name is required'); return }
     if (!form.greeting.trim()) { toast.error('Greeting message is required'); return }
 
     setSaving(true)
-    try {
-      if (isNew) {
-        await supabase.from('workflows').insert(form)
-        toast.success('Workflow created!')
-      } else {
-        await supabase.from('workflows').update(form).eq('id', params?.id as string)
-        toast.success('Workflow updated!')
-      }
-      router.push('/workflows')
-    } catch {
-      toast.success('Workflow saved!')
-      router.push('/workflows')
-    } finally {
-      setSaving(false)
+    if (isNew) {
+      localDB.saveWorkflow(form)
+      toast.success('Workflow created!')
+    } else {
+      localDB.updateWorkflow(params?.id as string, form)
+      toast.success('Workflow updated!')
     }
+    router.push('/workflows')
+    setSaving(false)
   }
 
   return (

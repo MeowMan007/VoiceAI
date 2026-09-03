@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { localDB } from '@/lib/local-db'
 import { Call, DashboardStats } from '@/types'
 import { formatRelativeTime, cn } from '@/lib/utils'
 import Link from 'next/link'
@@ -84,35 +84,29 @@ export default function DashboardPage() {
   const [recentCalls, setRecentCalls] = useState<Call[]>(SEED_CALLS)
   const [businessCount, setBusinessCount] = useState(4)
   const [workflowCount, setWorkflowCount] = useState(4)
-  const supabase = createClient()
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        const [{ data: businesses }, { data: workflows }, { data: calls }] = await Promise.all([
-          user ? supabase.from('businesses').select('id').eq('owner_id', user.id) : supabase.from('businesses').select('id'),
-          supabase.from('workflows').select('id, business_id'),
-          supabase.from('calls').select('*, business:businesses(name, type)').order('created_at', { ascending: false }).limit(10)
-        ])
-        if (calls && calls.length > 0) {
-          const today = new Date().toISOString().split('T')[0]
-          setStats({
-            total_calls: calls.length,
-            pending_calls: calls.filter(c => c.follow_up_status === 'pending').length,
-            urgent_calls: calls.filter(c => c.urgency === 'urgent').length,
-            completed_calls: calls.filter(c => c.status === 'completed' || c.follow_up_status === 'resolved').length,
-            today_calls: calls.filter(c => c.created_at.startsWith(today)).length
-          })
-          setRecentCalls(calls)
-        }
-        if (businesses && businesses.length > 0) setBusinessCount(businesses.length)
-        if (workflows && workflows.length > 0) setWorkflowCount(workflows.length)
-      } catch (err) {
-        console.warn('Using demo data fallback:', err)
+    try {
+      const calls = localDB.getCalls()
+      const businesses = localDB.getBusinesses()
+      const workflows = localDB.getWorkflows()
+      const today = new Date().toISOString().split('T')[0]
+
+      if (calls.length > 0) {
+        setStats({
+          total_calls: calls.length,
+          pending_calls: calls.filter(c => c.follow_up_status === 'pending').length,
+          urgent_calls: calls.filter(c => c.urgency === 'urgent').length,
+          completed_calls: calls.filter(c => c.status === 'completed' || c.follow_up_status === 'resolved').length,
+          today_calls: calls.filter(c => c.created_at.startsWith(today)).length
+        })
+        setRecentCalls(calls.slice(0, 10))
       }
+      if (businesses.length > 0) setBusinessCount(businesses.length)
+      if (workflows.length > 0) setWorkflowCount(workflows.length)
+    } catch (err) {
+      console.warn('Using demo data fallback:', err)
     }
-    fetchData()
   }, [])
 
   const statCards = [

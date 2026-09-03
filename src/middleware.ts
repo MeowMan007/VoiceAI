@@ -9,8 +9,8 @@ export async function middleware(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  // If Supabase keys are not yet configured or placeholder, allow access to all routes for demo/simulation
-  if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('your_supabase')) {
+  // If Supabase keys are not yet configured, placeholder, or demo URL — allow access to all routes
+  if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('your_supabase') || supabaseUrl.includes('demo.supabase.co')) {
     return supabaseResponse
   }
 

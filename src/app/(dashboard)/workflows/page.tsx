@@ -1,193 +1,36 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { localDB } from '@/lib/local-db'
 import { Workflow, Business, BUSINESS_TYPES, WORKFLOW_TEMPLATES } from '@/types'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { Plus, GitBranch, Pencil, Trash2, Power, Calendar, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const SEED_WORKFLOWS: (Workflow & { business: Business })[] = [
-  {
-    id: 'wf-seed-1',
-    business_id: 'biz-seed-1',
-    name: 'Cake Order Intake & Urgency Qualification',
-    trigger: 'missed_call',
-    greeting: WORKFLOW_TEMPLATES.cake_shop.greeting!,
-    closing_message: WORKFLOW_TEMPLATES.cake_shop.closing_message!,
-    language: 'en',
-    fields: WORKFLOW_TEMPLATES.cake_shop.fields!,
-    conditions: WORKFLOW_TEMPLATES.cake_shop.conditions!,
-    post_action: 'create_record',
-    calendar_enabled: true,
-    is_active: true,
-    created_at: new Date(Date.now() - 1000 * 3600 * 48).toISOString(),
-    updated_at: new Date().toISOString(),
-    business: {
-      id: 'biz-seed-1',
-      owner_id: 'demo',
-      name: 'Sweet Delights Bakery',
-      type: 'cake_shop',
-      language: 'en',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  },
-  {
-    id: 'wf-seed-2',
-    business_id: 'biz-seed-2',
-    name: 'Clinic Patient Appointment Booking',
-    trigger: 'missed_call',
-    greeting: WORKFLOW_TEMPLATES.clinic.greeting!,
-    closing_message: WORKFLOW_TEMPLATES.clinic.closing_message!,
-    language: 'en',
-    fields: WORKFLOW_TEMPLATES.clinic.fields!,
-    conditions: WORKFLOW_TEMPLATES.clinic.conditions!,
-    post_action: 'create_record',
-    calendar_enabled: true,
-    is_active: true,
-    created_at: new Date(Date.now() - 1000 * 3600 * 72).toISOString(),
-    updated_at: new Date().toISOString(),
-    business: {
-      id: 'biz-seed-2',
-      owner_id: 'demo',
-      name: 'Apex Family Clinic',
-      type: 'clinic',
-      language: 'en',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  },
-  {
-    id: 'wf-seed-3',
-    business_id: 'biz-seed-3',
-    name: 'Courier Status & Package Routing',
-    trigger: 'missed_call',
-    greeting: WORKFLOW_TEMPLATES.delivery.greeting!,
-    closing_message: WORKFLOW_TEMPLATES.delivery.closing_message!,
-    language: 'en',
-    fields: WORKFLOW_TEMPLATES.delivery.fields!,
-    conditions: WORKFLOW_TEMPLATES.delivery.conditions!,
-    post_action: 'create_record',
-    calendar_enabled: false,
-    is_active: true,
-    created_at: new Date(Date.now() - 1000 * 3600 * 96).toISOString(),
-    updated_at: new Date().toISOString(),
-    business: {
-      id: 'biz-seed-3',
-      owner_id: 'demo',
-      name: 'SwiftGo Express Logistics',
-      type: 'delivery',
-      language: 'en',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  },
-  {
-    id: 'wf-seed-4',
-    business_id: 'biz-seed-4',
-    name: 'Property Viewing & Buyer Advisory',
-    trigger: 'missed_call',
-    greeting: WORKFLOW_TEMPLATES.real_estate.greeting!,
-    closing_message: WORKFLOW_TEMPLATES.real_estate.closing_message!,
-    language: 'en',
-    fields: WORKFLOW_TEMPLATES.real_estate.fields!,
-    conditions: WORKFLOW_TEMPLATES.real_estate.conditions!,
-    post_action: 'create_record',
-    calendar_enabled: true,
-    is_active: true,
-    created_at: new Date(Date.now() - 1000 * 3600 * 120).toISOString(),
-    updated_at: new Date().toISOString(),
-    business: {
-      id: 'biz-seed-4',
-      owner_id: 'demo',
-      name: 'Prestige Property Realty',
-      type: 'real_estate',
-      language: 'en',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  },
-  {
-    id: 'wf-seed-5',
-    business_id: 'biz-seed-1',
-    name: 'Cake Order Intake (Hindi — हिंदी)',
-    trigger: 'missed_call',
-    greeting: 'नमस्ते! Sweet Delights Bakery में आपका स्वागत है। मुझे बताइए, क्या आप केक ऑर्डर करना चाहते हैं या कोई प्रश्न है?',
-    closing_message: 'धन्यवाद! हमारी टीम जल्द ही आपसे संपर्क करेगी।',
-    language: 'hi',
-    fields: [
-      { id: '1', label: 'केक का प्रकार (Cake Type)', key: 'cake_type', type: 'text', required: true, order: 1 },
-      { id: '2', label: 'फ्लेवर (Flavour)', key: 'flavour', type: 'text', required: true, order: 2 },
-      { id: '3', label: 'वजन (Weight)', key: 'weight', type: 'text', required: true, order: 3 },
-      { id: '4', label: 'डिलीवरी या पिकअप', key: 'delivery_type', type: 'select', required: true, options: ['डिलीवरी', 'पिकअप'], order: 4 }
-    ],
-    conditions: [
-      { id: '1', field: 'required_date', operator: 'less_than', value: '24', action: 'mark_urgent', action_label: '24 घंटे में डिलीवरी — अर्जेंट' }
-    ],
-    post_action: 'create_record',
-    calendar_enabled: false,
-    is_active: true,
-    created_at: new Date(Date.now() - 1000 * 3600 * 144).toISOString(),
-    updated_at: new Date().toISOString(),
-    business: {
-      id: 'biz-seed-1',
-      owner_id: 'demo',
-      name: 'Sweet Delights Bakery',
-      type: 'cake_shop',
-      language: 'hi',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  }
-]
-
 export default function WorkflowsPage() {
-  const [workflows, setWorkflows] = useState<(Workflow & { business: Business })[]>(SEED_WORKFLOWS)
-  const supabase = createClient()
+  const [workflows, setWorkflows] = useState<(Workflow & { business: Business | null })[]>([])
 
-  const fetchWorkflows = async () => {
-    try {
-      const { data } = await supabase
-        .from('workflows')
-        .select('*, business:businesses(name, type)')
-        .order('created_at', { ascending: false })
-
-      if (data && data.length > 0) {
-        setWorkflows(data as unknown as (Workflow & { business: Business })[])
-      } else {
-        setWorkflows(SEED_WORKFLOWS)
-      }
-    } catch {
-      setWorkflows(SEED_WORKFLOWS)
-    }
+  const fetchWorkflows = () => {
+    setWorkflows(localDB.getWorkflowsWithBusiness())
   }
 
   useEffect(() => {
     fetchWorkflows()
   }, [])
 
-  const handleDelete = async (id: string, name: string) => {
+  const handleDelete = (id: string, name: string) => {
     if (!confirm(`Delete workflow "${name}"?`)) return
-    try {
-      await supabase.from('workflows').delete().eq('id', id)
-      setWorkflows(prev => prev.filter(w => w.id !== id))
-      toast.success('Workflow deleted')
-    } catch {
-      setWorkflows(prev => prev.filter(w => w.id !== id))
-      toast.success('Workflow removed')
-    }
+    localDB.deleteWorkflow(id)
+    setWorkflows(prev => prev.filter(w => w.id !== id))
+    toast.success('Workflow deleted')
   }
 
-  const toggleActive = async (id: string, current: boolean) => {
-    try {
-      await supabase.from('workflows').update({ is_active: !current }).eq('id', id)
-    } catch {
-      // Demo update
-    }
+  const toggleActive = (id: string, current: boolean) => {
+    localDB.updateWorkflow(id, { is_active: !current })
     setWorkflows(prev => prev.map(w => w.id === id ? { ...w, is_active: !current } : w))
     toast.success(`Workflow ${!current ? 'activated' : 'paused'}`)
   }
+
 
   return (
     <div className="page-container">

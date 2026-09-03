@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { Call, BUSINESS_TYPES, CallStatus } from '@/types'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
@@ -78,57 +77,41 @@ const SEED_CALLS: Record<string, Call> = {
   }
 }
 
+import { localDB } from '@/lib/local-db'
+
 export default function CallDetailPage() {
   const params = useParams()
   const callId = params?.id as string
   const [call, setCall] = useState<Call | null>(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
-  const supabase = createClient()
 
-  const fetchCall = async () => {
+  const fetchCall = () => {
     setLoading(true)
-    try {
-      if (SEED_CALLS[callId]) {
-        setCall(SEED_CALLS[callId])
-        setLoading(false)
-        return
+    const localCall = localDB.getCall(callId)
+    if (localCall) {
+      const biz = localDB.getBusiness(localCall.business_id)
+      const wf = localDB.getWorkflow(localCall.workflow_id)
+      setCall({ ...localCall, business: biz || undefined, workflow: wf || undefined } as Call)
+    } else if (SEED_CALLS[callId]) {
+      setCall(SEED_CALLS[callId])
+    } else {
+      const firstCall = localDB.getCalls()[0]
+      if (firstCall) {
+        const biz = localDB.getBusiness(firstCall.business_id)
+        setCall({ ...firstCall, business: biz || undefined } as Call)
       }
-
-      const { data } = await supabase
-        .from('calls')
-        .select('*, business:businesses(name, type, phone), workflow:workflows(name, trigger, post_action, calendar_enabled)')
-        .eq('id', callId)
-        .single()
-
-      if (data) {
-        setCall(data as Call)
-      } else if (SEED_CALLS['call-seed-1']) {
-        setCall(SEED_CALLS['call-seed-1'])
-      }
-    } catch {
-      if (SEED_CALLS['call-seed-1']) {
-        setCall(SEED_CALLS['call-seed-1'])
-      }
-    } finally {
-      setLoading(false)
     }
+    setLoading(false)
   }
 
   useEffect(() => {
     if (callId) fetchCall()
   }, [callId])
 
-  const handleStatusChange = async (status: CallStatus, followUp: Call['follow_up_status']) => {
+  const handleStatusChange = (status: CallStatus, followUp: Call['follow_up_status']) => {
     setUpdating(true)
-    try {
-      await supabase
-        .from('calls')
-        .update({ status, follow_up_status: followUp })
-        .eq('id', callId)
-    } catch {
-      // Demo update
-    }
+    localDB.updateCall(callId, { status, follow_up_status: followUp })
     toast.success(`Marked as ${followUp}`)
     setCall(prev => prev ? { ...prev, status, follow_up_status: followUp } : null)
     setUpdating(false)

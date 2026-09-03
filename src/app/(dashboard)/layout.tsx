@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { demoAuth } from '@/lib/demo-auth'
 import { useState } from 'react'
 import {
   LayoutDashboard, Building2, GitBranch, PhoneCall,
@@ -21,13 +21,11 @@ const navItems = [
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const supabase = createClient()
   const [collapsed, setCollapsed] = useState(false)
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
+  const handleLogout = () => {
+    demoAuth.signOut()
     router.push('/login')
-    router.refresh()
   }
 
   return (
