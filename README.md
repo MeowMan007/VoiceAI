@@ -2,7 +2,7 @@
 
 A responsive web application for small business owners to automate missed call handling, capture structured customer details, qualify leads, schedule calendar appointments via Google Calendar tool calling, and manage follow-ups across multiple industries.
 
-Built with **Next.js 16 App Router**, **TypeScript**, **Supabase (PostgreSQL)**, **OpenAI / Gemini GPT-4o**, **ElevenLabs TTS**, **Deepgram STT**, and **Google Calendar API**.
+Built with **Next.js 16 App Router**, **TypeScript**, **Supabase (PostgreSQL)**, **Google Gemini 1.5 Flash**, **ElevenLabs TTS**, **Deepgram STT**, and **Google Calendar API**.
 
 ---
 
@@ -31,7 +31,7 @@ Built with **Next.js 16 App Router**, **TypeScript**, **Supabase (PostgreSQL)**,
 - **Voice Engine (Prompt-Specified Stack)**:
   - 🎙 **Deepgram** — Real-time browser speech-to-text (WebSocket, Nova-2 model)
   - 🔊 **ElevenLabs** — Neural text-to-speech streaming (multilingual v2 for Hindi, Turbo v2.5 for English)
-  - 🤖 **OpenAI GPT-4o** — AI conversation with tool calling
+  - 🤖 **Google Gemini 1.5 Flash** — Conversational reasoning and tool calling
   - No browser speech APIs used
 - **Google Calendar Agent Tool Calling** (mandatory integration):
   - `check_calendar_availability` — check a time slot before booking

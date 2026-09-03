@@ -112,7 +112,6 @@ function getSavedVoiceKeys() {
         { role: 'user', content: userText.trim() },
       ]
 
-      const keys = getSavedVoiceKeys()
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -120,7 +119,7 @@ function getSavedVoiceKeys() {
           messages: chatMessages,
           workflow: { ...workflow, business: { name: bizName } },
           calendarAccessToken: calendarToken,
-          aiConfig: keys.openaiApiKey ? { apiKey: keys.openaiApiKey, provider: 'openai' } : undefined,
+          aiConfig: { provider: 'gemini' },
         }),
       })
 
@@ -398,7 +397,7 @@ function getSavedVoiceKeys() {
           color: 'var(--green)',
           fontWeight: 600,
         }}>
-          🤖 GPT-4o
+          🤖 Google Gemini
         </span>
       </div>
 
