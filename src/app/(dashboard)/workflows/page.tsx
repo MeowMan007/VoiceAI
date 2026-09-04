@@ -5,7 +5,7 @@ import { getUser } from '@/lib/demo-auth'
 import { localDB, Workflow, Business } from '@/lib/local-db'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
-import { Plus, GitBranch, Pencil, Trash2, Power, Play } from 'lucide-react'
+import { Plus, GitBranch, Pencil, Trash2, Power, Play, Calendar, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function WorkflowsPage() {
@@ -38,7 +38,7 @@ export default function WorkflowsPage() {
   }
 
   const toggleActive = (id: string, current: boolean) => {
-    localDB.workflows.update(id, { isActive: !current })
+    localDB.workflows.update(id, { is_active: !current })
     reload(userId)
     toast.success(`Workflow ${!current ? 'activated' : 'paused'}`)
   }
@@ -73,8 +73,10 @@ export default function WorkflowsPage() {
           </div>
         )}
         {workflows.map(wf => {
-          const biz = businessMap[wf.businessId]
-          const stepCount = wf.steps?.length || 0
+          const biz = businessMap[wf.business_id || (wf as any).businessId] || wf.business
+          const fieldCount = wf.fields?.length || 0
+          const condCount = wf.conditions?.length || 0
+          const isAct = wf.is_active !== false && (wf as any).isActive !== false
 
           return (
             <div
@@ -86,7 +88,7 @@ export default function WorkflowsPage() {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: '20px',
-                opacity: wf.isActive ? 1 : 0.6
+                opacity: isAct ? 1 : 0.65
               }}
             >
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', minWidth: 0 }}>
@@ -103,14 +105,26 @@ export default function WorkflowsPage() {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '4px' }}>
                     <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff' }}>{wf.name}</h3>
-                    <span className={cn('badge', wf.isActive ? 'badge-completed' : 'badge-closed')}>
-                      {wf.isActive ? 'Active' : 'Paused'}
+                    <span className={cn('badge', isAct ? 'badge-completed' : 'badge-closed')}>
+                      {isAct ? 'Active' : 'Paused'}
                     </span>
+                    <span className="badge badge-new text-[10px]">
+                      Trigger: Missed Call
+                    </span>
+                    {wf.language === 'hi' && (
+                      <span className="badge badge-pending text-[10px]">Hindi (हिंदी)</span>
+                    )}
+                    {wf.calendar_enabled && (
+                      <span className="badge badge-contacted text-[10px] flex items-center gap-1">
+                        <Calendar size={10} /> Google Calendar
+                      </span>
+                    )}
                   </div>
 
                   <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    <span style={{ color: '#ffffff', fontWeight: 500 }}>{biz?.name || 'Unknown Business'}</span>
-                    &nbsp;·&nbsp;{wf.useCase || 'Missed Call'}&nbsp;·&nbsp;{stepCount} steps
+                    <span style={{ color: '#ffffff', fontWeight: 500 }}>{biz?.name || 'General Business'}</span>
+                    &nbsp;·&nbsp;{fieldCount} fields to collect
+                    &nbsp;·&nbsp;{condCount} priority rule{condCount !== 1 ? 's' : ''}
                   </p>
                 </div>
               </div>
@@ -122,18 +136,18 @@ export default function WorkflowsPage() {
                   className="btn-primary"
                   style={{ padding: '7px 12px', fontSize: '12px' }}
                 >
-                  <Play size={11} fill="currentColor" /> Test Call
+                  <Play size={11} fill="currentColor" /> Test Simulator
                 </Link>
 
                 <button
-                  onClick={() => toggleActive(wf.id, wf.isActive)}
+                  onClick={() => toggleActive(wf.id, isAct)}
                   style={{
                     padding: '7px 10px', borderRadius: '8px',
                     background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)',
-                    color: wf.isActive ? 'var(--green)' : 'var(--text-muted)',
+                    color: isAct ? 'var(--green)' : 'var(--text-muted)',
                     cursor: 'pointer', display: 'inline-flex', alignItems: 'center'
                   }}
-                  title={wf.isActive ? 'Pause Workflow' : 'Activate Workflow'}
+                  title={isAct ? 'Pause Workflow' : 'Activate Workflow'}
                 >
                   <Power size={13} />
                 </button>

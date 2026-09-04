@@ -70,10 +70,10 @@ export default function BusinessFormPage() {
 
     try {
       if (isNew) {
-        localDB.businesses.create({ ...form, userId })
+        localDB.businesses.create({ ...form, type: form.type as any, language: form.language as any, userId })
         toast.success('Business profile created!')
       } else {
-        localDB.businesses.update(params?.id as string, form)
+        localDB.businesses.update(params?.id as string, { ...form, type: form.type as any, language: form.language as any })
         toast.success('Business profile updated!')
       }
       router.push('/businesses')

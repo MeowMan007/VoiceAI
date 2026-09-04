@@ -1,20 +1,25 @@
 export type BusinessType = 'cake_shop' | 'clinic' | 'real_estate' | 'delivery' | 'repair' | 'other'
 export type Language = 'en' | 'hi'
-export type CallStatus = 'new' | 'in_progress' | 'completed' | 'contacted' | 'closed'
+export type CallStatus = 'new' | 'in_progress' | 'completed' | 'contacted' | 'closed' | 'missed'
 export type Urgency = 'normal' | 'urgent' | 'low'
 export type FollowUpStatus = 'pending' | 'contacted' | 'resolved' | 'closed'
 
 export interface Business {
   id: string
-  owner_id: string
+  owner_id?: string
+  userId?: string
   name: string
   type: BusinessType
   phone?: string
+  email?: string
+  greeting?: string
   description?: string
   language: Language
   logo_url?: string
   created_at: string
+  createdAt?: string
   updated_at: string
+  updatedAt?: string
 }
 
 export interface WorkflowField {
@@ -77,6 +82,8 @@ export interface Call {
   duration_seconds?: number
   calendar_event_id?: string
   calendar_event_url?: string
+  tools_used?: string[]
+  toolsUsed?: string[]
   created_at: string
   updated_at: string
   business?: Business

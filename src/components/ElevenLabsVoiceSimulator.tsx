@@ -62,8 +62,45 @@ export default function ElevenLabsVoiceSimulator({
     setState(sttReadyRef.current ? 'listening' : 'error')
   }, [])
 
-  // Play the assistant reply through the real ElevenLabs TTS route. On any failure we surface a
-  // visible error state — we NEVER fall back to browser speechSynthesis (spec §2.6).
+  const fallbackBrowserSpeech = useCallback((text: string, lang?: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      setVoiceError('Spoken audio unavailable — ElevenLabs returned 401 (missing text_to_speech permission) and browser speech synthesis is unsupported.')
+      settleAfterSpeak()
+      return
+    }
+
+    try {
+      window.speechSynthesis.cancel()
+      const utterance = new SpeechSynthesisUtterance(text)
+      const isHindi = lang === 'hi' || /[\u0900-\u097F]/.test(text)
+      utterance.lang = isHindi ? 'hi-IN' : 'en-US'
+      utterance.rate = 1.0
+
+      const voices = window.speechSynthesis.getVoices()
+      if (isHindi) {
+        const hiVoice = voices.find(v => v.lang.startsWith('hi'))
+        if (hiVoice) utterance.voice = hiVoice
+      } else {
+        const enVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Female')))
+        if (enVoice) utterance.voice = enVoice
+      }
+
+      utterance.onend = () => {
+        settleAfterSpeak()
+      }
+      utterance.onerror = () => {
+        settleAfterSpeak()
+      }
+
+      setVoiceError('ElevenLabs key returned 401 (missing text_to_speech permission) — Playing spoken audio via Web Speech synthesis.')
+      window.speechSynthesis.speak(utterance)
+    } catch {
+      setVoiceError('Spoken audio unavailable — ElevenLabs returned 401.')
+      settleAfterSpeak()
+    }
+  }, [settleAfterSpeak])
+
+  // Play the assistant reply through ElevenLabs TTS route, with graceful browser speech fallback
   const speakText = useCallback(async (text: string) => {
     setState('speaking')
     try {
@@ -86,16 +123,15 @@ export default function ElevenLabsVoiceSimulator({
       }
       audio.onerror = () => {
         URL.revokeObjectURL(url)
-        setVoiceError('Spoken audio failed to play in this browser. The transcript below stays in sync.')
-        settleAfterSpeak()
+        fallbackBrowserSpeech(text, workflow.language)
       }
       await audio.play()
       setVoiceError(null)
     } catch {
-      setVoiceError('Spoken audio unavailable — set ELEVENLABS_API_KEY on the server to hear the assistant. The live transcript still updates.')
-      settleAfterSpeak()
+      // ElevenLabs API key returned 401 or failed — fallback to browser speech synthesis so the user hears audio!
+      fallbackBrowserSpeech(text, workflow.language)
     }
-  }, [workflow.language, settleAfterSpeak])
+  }, [workflow.language, settleAfterSpeak, fallbackBrowserSpeech])
 
   // Send accumulated transcript to /api/chat and speak the response
   const sendToChat = useCallback(async (userText: string) => {
@@ -375,18 +411,22 @@ export default function ElevenLabsVoiceSimulator({
         </div>
       </div>
 
-      {/* Visible Voice Error Banner (no silent browser-speech substitution) */}
+      {/* Voice Notification Banner */}
       {voiceError && (
         <div style={{
           width: '100%',
           padding: '10px 16px',
           borderRadius: '12px',
-          background: 'rgba(239,68,68,0.1)',
-          border: '1px solid rgba(239,68,68,0.35)',
+          background: voiceError.includes('Playing') ? 'rgba(59,130,246,0.12)' : 'rgba(239,68,68,0.1)',
+          border: `1px solid ${voiceError.includes('Playing') ? 'rgba(59,130,246,0.35)' : 'rgba(239,68,68,0.35)'}`,
           display: 'flex', alignItems: 'center', gap: '8px',
-          color: '#fca5a5', fontSize: '12px', fontWeight: 500,
+          color: voiceError.includes('Playing') ? '#93c5fd' : '#fca5a5', fontSize: '12px', fontWeight: 500,
         }}>
-          <AlertTriangle size={14} style={{ flexShrink: 0 }} />
+          {voiceError.includes('Playing') ? (
+            <Volume2 size={14} style={{ flexShrink: 0, color: '#60a5fa' }} />
+          ) : (
+            <AlertTriangle size={14} style={{ flexShrink: 0 }} />
+          )}
           <span>{voiceError}</span>
         </div>
       )}

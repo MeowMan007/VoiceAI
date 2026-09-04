@@ -7,10 +7,11 @@ import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import {
   PhoneCall, TrendingUp, AlertTriangle, CheckCircle2,
-  Clock, ArrowRight, Building2, GitBranch, Mic
+  Clock, ArrowRight, Building2, GitBranch, Mic, Calendar, UserCheck
 } from 'lucide-react'
 
-function formatRelativeTime(iso: string): string {
+function formatRelativeTime(iso?: string): string {
+  if (!iso) return '—'
   const diff = Date.now() - new Date(iso).getTime()
   const mins = Math.floor(diff / 60000)
   if (mins < 60) return `${mins}m ago`
@@ -24,7 +25,7 @@ export default function DashboardPage() {
   const [recentCalls, setRecentCalls] = useState<CallRecord[]>([])
   const [businessCount, setBusinessCount] = useState(0)
   const [workflowCount, setWorkflowCount] = useState(0)
-  const [stats, setStats] = useState({ total: 0, completed: 0, missed: 0, today: 0 })
+  const [stats, setStats] = useState({ total: 0, completed: 0, missed: 0, urgent: 0, pending: 0, today: 0 })
   const [businessMap, setBusinessMap] = useState<Record<string, Business>>({})
 
   useEffect(() => {
@@ -46,15 +47,15 @@ export default function DashboardPage() {
     setBusinessCount(businesses.length)
     setWorkflowCount(workflows.length)
     setRecentCalls(calls.slice(0, 10))
-    setStats(s)
+    setStats(s as any)
     setBusinessMap(bmap)
   }, [router])
 
   const statCards = [
-    { label: 'Total Calls', value: stats.total, icon: PhoneCall, accent: '#ffffff', sub: 'All calls handled' },
-    { label: 'Completed', value: stats.completed, icon: CheckCircle2, accent: '#10b981', sub: 'Successfully resolved' },
-    { label: 'Missed', value: stats.missed, icon: AlertTriangle, accent: '#f87171', sub: 'Missed — needs follow-up' },
-    { label: "Today's Calls", value: stats.today, icon: Clock, accent: '#fbbf24', sub: 'Activity today' },
+    { label: 'Total Calls', value: stats.total, icon: PhoneCall, accent: '#ffffff', sub: 'Total calls processed by AI' },
+    { label: 'Urgent Priority', value: stats.urgent || 0, icon: AlertTriangle, accent: '#f87171', sub: 'Immediate attention required' },
+    { label: 'Pending Follow-Up', value: stats.pending || 0, icon: Clock, accent: '#fbbf24', sub: 'Awaiting business callback' },
+    { label: "Today's Calls", value: stats.today, icon: TrendingUp, accent: '#10b981', sub: 'Active today' },
   ]
 
   return (
@@ -63,10 +64,10 @@ export default function DashboardPage() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="page-title">Dashboard</h1>
-            <span className="badge badge-completed">Live</span>
+            <span className="badge badge-completed">Live System</span>
           </div>
           <p className="page-subtitle">
-            Real-time status of your AI assistant handling customer calls and follow-ups.
+            Real-time status of your Voice AI assistant handling customer missed calls, bookings, and follow-ups.
           </p>
         </div>
         <Link href="/simulator" id="open-simulator-btn" className="btn-primary">
@@ -75,6 +76,7 @@ export default function DashboardPage() {
         </Link>
       </div>
 
+      {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '28px' }}>
         {statCards.map(card => (
           <div
@@ -103,11 +105,12 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* Quick Navigation Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '32px' }}>
         {[
-          { href: '/businesses', icon: Building2, label: `${businessCount} Active Businesses`, sub: 'Bakeries, Clinics, Logistics & Services' },
-          { href: '/workflows', icon: GitBranch, label: `${workflowCount} Configured Workflows`, sub: 'Missed-call triggers & field logic' },
-          { href: '/calls', icon: TrendingUp, label: `${stats.today} Calls Handled Today`, sub: 'Records saved locally in your browser' },
+          { href: '/businesses', icon: Building2, label: `${businessCount} Active Businesses`, sub: 'Bakeries, Clinics, Logistics, Real Estate & Repair' },
+          { href: '/workflows', icon: GitBranch, label: `${workflowCount} Configured Workflows`, sub: 'Missed-call triggers, field captures & rules' },
+          { href: '/calls', icon: UserCheck, label: `${recentCalls.length} Customer Call Records`, sub: 'Classified transcripts, intent & follow-up tracking' },
         ].map(item => (
           <Link
             key={item.href}
@@ -132,32 +135,33 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* Recent Interactions Table */}
       <div className="glass-card" style={{ overflow: 'hidden' }}>
         <div
           className="flex items-center justify-between"
           style={{ padding: '18px 24px', borderBottom: '1px solid var(--border-subtle)' }}
         >
           <div>
-            <h2 style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff' }}>Recent Interactions</h2>
+            <h2 style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff' }}>Recent Call Interactions</h2>
             <p style={{ fontSize: '12px', marginTop: '2px', color: 'var(--text-secondary)' }}>
-              Call records captured and classified by your voice assistant
+              Latest customer calls handled by Voice AI with captured intent and urgency classification
             </p>
           </div>
           <Link href="/calls" className="text-xs font-semibold flex items-center gap-1.5 transition-colors" style={{ color: 'var(--green)', textDecoration: 'none' }}>
-            View All <ArrowRight size={12} />
+            View All Calls <ArrowRight size={12} />
           </Link>
         </div>
 
         {recentCalls.length === 0 ? (
           <p style={{ padding: '32px 24px', fontSize: '13px', color: 'var(--text-muted)' }}>
-            No calls yet. Run the Voice Simulator to generate call records.
+            No calls yet. Run the Voice Simulator to test customer conversations.
           </p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="w-full text-left" style={{ fontSize: '12px', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
-                  {['Caller', 'Business', 'Status', 'Duration', 'Received', ''].map(h => (
+                  {['Caller', 'Business & Intent', 'Priority & Status', 'Duration', 'Received', ''].map(h => (
                     <th key={h} style={{ padding: '12px 24px', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', ...(h === '' ? { textAlign: 'right' } : {}) }}>
                       {h}
                     </th>
@@ -166,7 +170,14 @@ export default function DashboardPage() {
               </thead>
               <tbody>
                 {recentCalls.map(call => {
-                  const biz = businessMap[call.businessId]
+                  const bizId = call.business_id || call.businessId || ''
+                  const biz = businessMap[bizId]
+                  const isUrgent = call.urgency === 'urgent'
+                  const followUp = call.follow_up_status || (call as any).followUpStatus || 'pending'
+                  const callerName = call.caller_name || call.callerName || 'Anonymous Caller'
+                  const callerPhone = call.caller_phone || call.callerPhone || 'Direct line'
+                  const createdAt = call.created_at || (call as any).createdAt
+
                   return (
                     <tr
                       key={call.id}
@@ -177,31 +188,46 @@ export default function DashboardPage() {
                       <td style={{ padding: '16px 24px' }}>
                         <Link href={`/calls/${call.id}`} style={{ textDecoration: 'none' }} className="block group">
                           <p className="font-semibold text-white group-hover:text-emerald-400 transition-colors">
-                            {call.callerName || 'Anonymous'}
+                            {callerName}
                           </p>
                           <p className="font-mono mt-0.5" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                            {call.callerPhone || 'Direct line'}
+                            {callerPhone}
                           </p>
                         </Link>
                       </td>
                       <td style={{ padding: '16px 24px' }}>
-                        <p className="font-medium text-white">{biz?.name || 'General'}</p>
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>{biz?.type || ''}</p>
+                        <p className="font-medium text-white">{biz?.name || 'General Business'}</p>
+                        <p className="text-xs mt-0.5 text-emerald-400">
+                          {call.intent || 'Customer Inquiry'}
+                        </p>
                       </td>
                       <td style={{ padding: '16px 24px' }}>
-                        <span className={cn('badge', {
-                          'badge-completed': call.status === 'completed',
-                          'badge-urgent': call.status === 'missed',
-                          'badge-pending': call.status === 'in-progress',
-                        })}>
-                          {call.status}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={cn('badge text-[10px]', {
+                            'badge-urgent': followUp === 'pending',
+                            'badge-contacted': followUp === 'contacted',
+                            'badge-completed': followUp === 'resolved',
+                            'badge-closed': followUp === 'closed',
+                          })}>
+                            {followUp.toUpperCase()}
+                          </span>
+                          {isUrgent && (
+                            <span className="badge badge-urgent text-[10px] flex items-center gap-0.5">
+                              <AlertTriangle size={9} /> URGENT
+                            </span>
+                          )}
+                          {call.calendar_event_id && (
+                            <span className="badge badge-contacted text-[10px] flex items-center gap-0.5" title="Calendar Event Booked">
+                              <Calendar size={9} /> Cal
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td style={{ padding: '16px 24px', color: 'var(--text-secondary)' }}>
-                        {call.duration ? `${call.duration}s` : '—'}
+                        {call.duration_seconds || (call as any).duration ? `${call.duration_seconds || (call as any).duration}s` : '—'}
                       </td>
                       <td style={{ padding: '16px 24px', color: 'var(--text-muted)', fontSize: '11px' }}>
-                        {formatRelativeTime(call.createdAt)}
+                        {formatRelativeTime(createdAt)}
                       </td>
                       <td style={{ padding: '16px 24px', textAlign: 'right' }}>
                         <Link href={`/calls/${call.id}`} className="btn-secondary" style={{ fontSize: '11px', padding: '6px 12px' }}>

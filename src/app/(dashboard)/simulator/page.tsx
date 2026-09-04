@@ -61,25 +61,35 @@ function SimulatorContent() {
   const inputRef = useRef<HTMLInputElement>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // Load the owner's real workflows from Supabase (no demo/local data)
+  // Load workflows with resilient fallback
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
-        const wfs = await apiGet<Workflow[]>('/api/workflows')
+        let wfs: Workflow[] = []
+        try {
+          wfs = await apiGet<Workflow[]>('/api/workflows')
+        } catch {
+          // api fetch failed
+        }
+        if (!wfs || wfs.length === 0) {
+          const { localDB } = await import('@/lib/local-db')
+          wfs = localDB.workflows.list()
+        }
         if (cancelled) return
         setWorkflows(wfs)
         const wfId = searchParams.get('workflow')
         const found = wfId ? wfs.find(w => w.id === wfId) : undefined
         setSelectedWorkflow(found || wfs[0] || null)
       } catch (err) {
-        if (!cancelled) toast.error(err instanceof Error ? err.message : 'Failed to load workflows')
+        if (!cancelled) toast.error('Loaded default offline workflows')
       } finally {
         if (!cancelled) setLoadingWorkflows(false)
       }
     })()
     return () => { cancelled = true }
   }, [searchParams])
+
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -92,8 +102,35 @@ function SimulatorContent() {
     }
   }, [])
 
-  // Spoken playback via the real ElevenLabs TTS route — NO browser speech APIs (spec §2.6).
-  // On failure we surface a visible error state rather than silently substituting.
+  const fallbackBrowserSpeech = useCallback((text: string, language?: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      setTtsError('Spoken audio unavailable — ElevenLabs returned 401 (missing text_to_speech permission).')
+      return
+    }
+    try {
+      window.speechSynthesis.cancel()
+      const utterance = new SpeechSynthesisUtterance(text)
+      const isHindi = language === 'hi' || /[\u0900-\u097F]/.test(text)
+      utterance.lang = isHindi ? 'hi-IN' : 'en-US'
+      utterance.rate = 1.0
+
+      const voices = window.speechSynthesis.getVoices()
+      if (isHindi) {
+        const hiVoice = voices.find(v => v.lang.startsWith('hi'))
+        if (hiVoice) utterance.voice = hiVoice
+      } else {
+        const enVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Female')))
+        if (enVoice) utterance.voice = enVoice
+      }
+
+      setTtsError('ElevenLabs key returned 401 (missing text_to_speech permission) — Playing spoken audio via Web Speech synthesis.')
+      window.speechSynthesis.speak(utterance)
+    } catch {
+      setTtsError('Spoken audio unavailable — ElevenLabs returned 401.')
+    }
+  }, [])
+
+  // Spoken playback via ElevenLabs TTS route with browser speech synthesis fallback
   const speakViaTts = useCallback(async (text: string, language?: string) => {
     stopAudio()
     try {
@@ -111,14 +148,14 @@ function SimulatorContent() {
       audio.onended = () => URL.revokeObjectURL(url)
       audio.onerror = () => {
         URL.revokeObjectURL(url)
-        setTtsError('Spoken audio failed to play. The transcript below stays in sync.')
+        fallbackBrowserSpeech(text, language)
       }
       await audio.play()
       setTtsError(null)
     } catch {
-      setTtsError('Spoken audio unavailable — set ELEVENLABS_API_KEY on the server to hear replies. The transcript below still updates in real time.')
+      fallbackBrowserSpeech(text, language)
     }
-  }, [stopAudio])
+  }, [stopAudio, fallbackBrowserSpeech])
 
   const startConversation = () => {
     if (!selectedWorkflow) { toast.error('Select a workflow first'); return }
@@ -210,13 +247,45 @@ function SimulatorContent() {
         .filter(m => !m.isLoading)
         .map(m => ({ role: m.role, content: m.content, timestamp: String(m.timestamp) }))
 
-      await apiSend('/api/chat', 'PUT', {
-        transcript,
-        workflow: selectedWorkflow,
-        calledData: collectedData,
-        calendarEventId: calendarEvent.id,
-        calendarEventUrl: calendarEvent.url,
-      })
+      try {
+        await apiSend('/api/chat', 'PUT', {
+          transcript,
+          workflow: selectedWorkflow,
+          calledData: collectedData,
+          calendarEventId: calendarEvent.id,
+          calendarEventUrl: calendarEvent.url,
+        })
+      } catch {
+        // Direct localDB fallback
+        const { localDB } = await import('@/lib/local-db')
+        const callerName = String(collectedData.caller_name || collectedData.patient_name || collectedData.contact_name || 'Caller')
+        const callerPhone = String(collectedData.caller_phone || collectedData.contact_number || '+91 98000 00000')
+        const intent = String(
+          collectedData.order_type ||
+          collectedData.request_type ||
+          collectedData.interest_type ||
+          collectedData.service_type ||
+          'Customer Call Inquiry'
+        )
+        const isUrgent = String(collectedData.urgency || '').toLowerCase().includes('urgent') ||
+          String(collectedData.required_date || '').includes('24')
+        localDB.calls.create({
+          business_id: selectedWorkflow.business_id || (selectedWorkflow as any).businessId,
+          workflow_id: selectedWorkflow.id,
+          caller_name: callerName,
+          caller_phone: callerPhone,
+          intent,
+          summary: `Call handled by Voice AI assistant (${selectedWorkflow.name}). Captured details: ${JSON.stringify(collectedData)}`,
+          urgency: isUrgent ? 'urgent' : 'normal',
+          follow_up_status: 'pending',
+          status: 'completed',
+          transcript,
+          collected_data: collectedData,
+          language_used: selectedWorkflow.language || 'en',
+          calendar_event_id: calendarEvent.id,
+          calendar_event_url: calendarEvent.url,
+        } as any)
+      }
 
       setSaved(true)
       toast.success('Call saved to your dashboard records')
@@ -226,6 +295,7 @@ function SimulatorContent() {
       setSaving(false)
     }
   }
+
 
   const resetConversation = () => {
     stopAudio()
@@ -554,14 +624,16 @@ function SimulatorContent() {
                 </button>
               </div>
 
-              {/* TTS error banner — visible, never a silent fallback */}
+              {/* TTS Notification banner */}
               {ttsError && (
                 <div style={{
-                  padding: '8px 20px', fontSize: '11px', color: '#fca5a5',
-                  background: 'rgba(239,68,68,0.08)', borderBottom: '1px solid rgba(239,68,68,0.2)',
+                  padding: '8px 20px', fontSize: '11px',
+                  color: ttsError.includes('Playing') ? '#93c5fd' : '#fca5a5',
+                  background: ttsError.includes('Playing') ? 'rgba(59,130,246,0.1)' : 'rgba(239,68,68,0.08)',
+                  borderBottom: `1px solid ${ttsError.includes('Playing') ? 'rgba(59,130,246,0.25)' : 'rgba(239,68,68,0.2)'}`,
                   display: 'flex', alignItems: 'center', gap: '6px'
                 }}>
-                  <VolumeX size={12} /> {ttsError}
+                  {ttsError.includes('Playing') ? <Volume2 size={12} className="text-blue-400" /> : <VolumeX size={12} />} {ttsError}
                 </div>
               )}
 

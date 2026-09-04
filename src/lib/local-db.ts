@@ -1,367 +1,305 @@
 /**
- * Local DB — localStorage-backed data store.
- * Replaces Supabase for demo/offline usage.
- * Supports businesses, workflows, and calls with full CRUD.
+ * Local DB — zero-dependency data store.
+ * Backed by localStorage on the client and in-memory seed cache on the server.
+ * Full CRUD for businesses, workflows, and calls matching src/types/index.ts.
  */
 
-export interface Business {
-  id: string
-  name: string
-  type: string
-  phone?: string
-  email?: string
-  description?: string
-  greeting?: string
-  language?: string
-  userId: string
-  createdAt: string
-  updatedAt: string
-}
+import { Business, Workflow, Call } from '@/types'
+import { SEED_BUSINESSES, SEED_WORKFLOWS, SEED_CALLS } from '@/lib/seed-data'
 
-export interface WorkflowStep {
-  id: string
-  type: 'collect' | 'confirm' | 'action' | 'end'
-  label: string
-  prompt?: string
-  field?: string
-}
+export type { Business, Workflow, Call }
 
-export interface Workflow {
-  id: string
-  businessId: string
-  name: string
-  useCase: string
-  steps: WorkflowStep[]
-  followUpAction: string
-  isActive: boolean
-  userId: string
-  createdAt: string
-  updatedAt: string
-}
-
-export interface CallRecord {
-  id: string
-  businessId: string
+// Compatibility alias for CallRecord
+export type CallRecord = Call & {
+  businessId?: string
   workflowId?: string
   callerName?: string
   callerPhone?: string
-  summary?: string
-  transcript?: string
-  status: 'completed' | 'missed' | 'in-progress'
   duration?: number
   toolsUsed?: string[]
-  userId: string
-  createdAt: string
+  tools_used?: string[]
+  userId?: string
+  createdAt?: string
 }
 
 const KEYS = {
-  businesses: 'voiceai_businesses',
-  workflows: 'voiceai_workflows',
-  calls: 'voiceai_calls',
-  seeded: 'voiceai_seeded',
+  businesses: 'voiceai_businesses_v2',
+  workflows: 'voiceai_workflows_v2',
+  calls: 'voiceai_calls_v2',
+  seeded: 'voiceai_seeded_v2',
 }
 
-function read<T>(key: string): T[] {
-  if (typeof window === 'undefined') return []
+// In-memory server fallback store
+const memoryStore = {
+  businesses: [...SEED_BUSINESSES],
+  workflows: [...SEED_WORKFLOWS],
+  calls: [...SEED_CALLS],
+}
+
+function read<T>(key: keyof typeof memoryStore, storageKey: string): T[] {
+  if (typeof window === 'undefined') {
+    return memoryStore[key] as unknown as T[]
+  }
   try {
-    return JSON.parse(localStorage.getItem(key) || '[]')
+    const raw = localStorage.getItem(storageKey)
+    if (!raw) return memoryStore[key] as unknown as T[]
+    return JSON.parse(raw)
   } catch {
-    return []
+    return memoryStore[key] as unknown as T[]
   }
 }
 
-function write<T>(key: string, data: T[]) {
-  localStorage.setItem(key, JSON.stringify(data))
+function write<T>(key: keyof typeof memoryStore, storageKey: string, data: T[]) {
+  (memoryStore[key] as unknown as T[]) = data
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(data))
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 function uid(): string {
   return Math.random().toString(36).slice(2, 10)
 }
 
-/** Seed demo data once per browser */
-export function seedIfNeeded(userId: string) {
+/** Seed demo data once per browser or initialize store */
+export function seedIfNeeded(_userId?: string) {
   if (typeof window === 'undefined') return
-  const alreadySeeded = localStorage.getItem(KEYS.seeded)
-  if (alreadySeeded) return
-
-  const now = new Date().toISOString()
-
-  const businesses: Business[] = [
-    {
-      id: 'biz_bakery',
-      name: 'Sweet Delights Bakery',
-      type: 'Bakery',
-      phone: '+91 98765 43210',
-      email: 'hello@sweetdelights.com',
-      description: 'Custom cakes and pastries for all occasions',
-      greeting: 'Thank you for calling Sweet Delights Bakery! We specialise in custom cakes and pastries.',
-      language: 'en',
-      userId,
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: 'biz_clinic',
-      name: 'Apex Family Clinic',
-      type: 'Healthcare',
-      phone: '+91 98765 11111',
-      email: 'appointments@apexclinic.com',
-      description: 'General practice and family medicine',
-      greeting: 'Thank you for calling Apex Family Clinic. How can I assist you today?',
-      language: 'en',
-      userId,
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: 'biz_delivery',
-      name: 'FastTrack Logistics',
-      type: 'Delivery',
-      phone: '+91 99887 76655',
-      email: 'support@fasttrack.com',
-      description: 'Same-day and next-day delivery services',
-      greeting: 'FastTrack Logistics here! How can I help you with your delivery today?',
-      language: 'en',
-      userId,
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: 'biz_realestate',
-      name: 'Prime Properties',
-      type: 'Real Estate',
-      phone: '+91 88776 65544',
-      email: 'info@primeproperties.com',
-      description: 'Residential and commercial property consultants',
-      greeting: 'Welcome to Prime Properties! Are you looking to buy, sell, or rent a property?',
-      language: 'en',
-      userId,
-      createdAt: now,
-      updatedAt: now,
-    },
-  ]
-
-  const workflows: Workflow[] = [
-    {
-      id: 'wf_bakery_order',
-      businessId: 'biz_bakery',
-      name: 'Cake Order Collection',
-      useCase: 'missed_call_follow_up',
-      steps: [
-        { id: 's1', type: 'collect', label: 'Customer Name', prompt: 'May I have your name?', field: 'name' },
-        { id: 's2', type: 'collect', label: 'Order Type', prompt: 'What type of cake are you ordering?', field: 'order_type' },
-        { id: 's3', type: 'collect', label: 'Delivery Date', prompt: 'When do you need it?', field: 'delivery_date' },
-        { id: 's4', type: 'action', label: 'Book Calendar', prompt: 'Book the order in calendar' },
-        { id: 's5', type: 'end', label: 'Confirm', prompt: 'Thank you! We will confirm your order shortly.' },
-      ],
-      followUpAction: 'calendar',
-      isActive: true,
-      userId,
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: 'wf_clinic_appt',
-      businessId: 'biz_clinic',
-      name: 'Appointment Booking',
-      useCase: 'appointment_booking',
-      steps: [
-        { id: 's1', type: 'collect', label: 'Patient Name', prompt: 'What is the patient name?', field: 'name' },
-        { id: 's2', type: 'collect', label: 'Reason for Visit', prompt: 'What is the reason for your visit?', field: 'reason' },
-        { id: 's3', type: 'collect', label: 'Preferred Date', prompt: 'What date and time works for you?', field: 'date' },
-        { id: 's4', type: 'action', label: 'Schedule Appointment', prompt: 'Booking your appointment' },
-        { id: 's5', type: 'end', label: 'Confirm', prompt: 'Your appointment is confirmed. See you soon!' },
-      ],
-      followUpAction: 'calendar',
-      isActive: true,
-      userId,
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: 'wf_delivery_track',
-      businessId: 'biz_delivery',
-      name: 'Order Status Lookup',
-      useCase: 'order_status',
-      steps: [
-        { id: 's1', type: 'collect', label: 'Order Number', prompt: 'Please provide your order number.', field: 'order_id' },
-        { id: 's2', type: 'action', label: 'Lookup Order', prompt: 'Checking your delivery status' },
-        { id: 's3', type: 'end', label: 'Status Report', prompt: 'Your order status has been shared.' },
-      ],
-      followUpAction: 'sms',
-      isActive: true,
-      userId,
-      createdAt: now,
-      updatedAt: now,
-    },
-  ]
-
-  const calls: CallRecord[] = [
-    {
-      id: 'call_001',
-      businessId: 'biz_bakery',
-      workflowId: 'wf_bakery_order',
-      callerName: 'Priya Sharma',
-      callerPhone: '+91 98000 11111',
-      summary: 'Custom birthday cake for 2kg chocolate cake, delivery on Saturday.',
-      status: 'completed',
-      duration: 180,
-      toolsUsed: ['Google Calendar'],
-      userId,
-      createdAt: new Date(Date.now() - 3600000).toISOString(),
-    },
-    {
-      id: 'call_002',
-      businessId: 'biz_clinic',
-      workflowId: 'wf_clinic_appt',
-      callerName: 'Rahul Mehta',
-      callerPhone: '+91 98000 22222',
-      summary: 'Appointment booked for general check-up, tomorrow at 10 AM.',
-      status: 'completed',
-      duration: 240,
-      toolsUsed: ['Google Calendar'],
-      userId,
-      createdAt: new Date(Date.now() - 7200000).toISOString(),
-    },
-    {
-      id: 'call_003',
-      businessId: 'biz_delivery',
-      workflowId: 'wf_delivery_track',
-      callerName: 'Anjali Patel',
-      callerPhone: '+91 98000 33333',
-      summary: 'Order ORD-4521 is out for delivery, expected by 6 PM.',
-      status: 'completed',
-      duration: 90,
-      toolsUsed: ['Order Lookup'],
-      userId,
-      createdAt: new Date(Date.now() - 10800000).toISOString(),
-    },
-    {
-      id: 'call_004',
-      businessId: 'biz_realestate',
-      callerName: 'Unknown Caller',
-      callerPhone: '+91 98000 44444',
-      summary: 'Missed call — no voicemail left.',
-      status: 'missed',
-      userId,
-      createdAt: new Date(Date.now() - 14400000).toISOString(),
-    },
-  ]
-
-  write(KEYS.businesses, businesses)
-  write(KEYS.workflows, workflows)
-  write(KEYS.calls, calls)
-  localStorage.setItem(KEYS.seeded, '1')
+  try {
+    const alreadySeeded = localStorage.getItem(KEYS.seeded)
+    if (!alreadySeeded) {
+      write('businesses', KEYS.businesses, SEED_BUSINESSES)
+      write('workflows', KEYS.workflows, SEED_WORKFLOWS)
+      write('calls', KEYS.calls, SEED_CALLS)
+      localStorage.setItem(KEYS.seeded, '2')
+    }
+  } catch {
+    /* ignore */
+  }
 }
-
-// ─── Businesses ───────────────────────────────────────────────────────────────
 
 export const localDB = {
   businesses: {
-    list(userId: string): Business[] {
-      return read<Business>(KEYS.businesses).filter(b => b.userId === userId)
+    list(_userId?: string): Business[] {
+      seedIfNeeded(_userId)
+      return read<Business>('businesses', KEYS.businesses)
     },
     get(id: string): Business | null {
-      return read<Business>(KEYS.businesses).find(b => b.id === id) ?? null
+      seedIfNeeded()
+      const all = read<Business>('businesses', KEYS.businesses)
+      return all.find(b => b.id === id) ?? null
     },
-    create(data: Omit<Business, 'id' | 'createdAt' | 'updatedAt'>): Business {
-      const all = read<Business>(KEYS.businesses)
+    create(data: Partial<Business> & { name: string; type: any }): Business {
+      seedIfNeeded()
+      const all = read<Business>('businesses', KEYS.businesses)
+      const now = new Date().toISOString()
+      const { name, type, ...rest } = data
       const item: Business = {
-        ...data,
         id: 'biz_' + uid(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        owner_id: data.owner_id || 'demo-user-1',
+        phone: data.phone || '',
+        description: data.description || '',
+        language: data.language || 'en',
+        created_at: now,
+        updated_at: now,
+        ...rest,
+        name,
+        type: type || 'other',
       }
-      write(KEYS.businesses, [...all, item])
+      write('businesses', KEYS.businesses, [item, ...all])
       return item
     },
     update(id: string, data: Partial<Business>): Business | null {
-      const all = read<Business>(KEYS.businesses)
+      seedIfNeeded()
+      const all = read<Business>('businesses', KEYS.businesses)
       const idx = all.findIndex(b => b.id === id)
       if (idx === -1) return null
-      all[idx] = { ...all[idx], ...data, updatedAt: new Date().toISOString() }
-      write(KEYS.businesses, all)
+      all[idx] = { ...all[idx], ...data, updated_at: new Date().toISOString() }
+      write('businesses', KEYS.businesses, all)
       return all[idx]
     },
     delete(id: string) {
-      write(KEYS.businesses, read<Business>(KEYS.businesses).filter(b => b.id !== id))
+      seedIfNeeded()
+      const all = read<Business>('businesses', KEYS.businesses)
+      write('businesses', KEYS.businesses, all.filter(b => b.id !== id))
     },
   },
 
   workflows: {
-    list(userId: string): Workflow[] {
-      return read<Workflow>(KEYS.workflows).filter(w => w.userId === userId)
+    list(_userId?: string): Workflow[] {
+      seedIfNeeded(_userId)
+      const wfs = read<Workflow>('workflows', KEYS.workflows)
+      const bizs = read<Business>('businesses', KEYS.businesses)
+      const bmap: Record<string, Business> = {}
+      bizs.forEach(b => { bmap[b.id] = b })
+      return wfs.map(w => ({
+        ...w,
+        business: bmap[w.business_id] || (w as any).business,
+        // compatibility aliases
+        businessId: w.business_id,
+        isActive: w.is_active,
+      }))
     },
     listByBusiness(businessId: string): Workflow[] {
-      return read<Workflow>(KEYS.workflows).filter(w => w.businessId === businessId)
+      return localDB.workflows.list().filter(w => w.business_id === businessId || (w as any).businessId === businessId)
     },
     get(id: string): Workflow | null {
-      return read<Workflow>(KEYS.workflows).find(w => w.id === id) ?? null
+      const all = localDB.workflows.list()
+      return all.find(w => w.id === id) ?? null
     },
-    create(data: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>): Workflow {
-      const all = read<Workflow>(KEYS.workflows)
+    create(data: Partial<Workflow> & { name: string; business_id?: string; businessId?: string }): Workflow {
+      seedIfNeeded()
+      const all = read<Workflow>('workflows', KEYS.workflows)
+      const now = new Date().toISOString()
+      const bId = data.business_id || data.businessId || 'biz_bakery'
+      const { name, ...rest } = data
       const item: Workflow = {
-        ...data,
         id: 'wf_' + uid(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        business_id: bId,
+        trigger: data.trigger || 'missed_call',
+        greeting: data.greeting || 'Thank you for calling. How can I assist you?',
+        closing_message: data.closing_message || 'Thank you! We will get back to you shortly.',
+        language: data.language || 'en',
+        fields: data.fields || [],
+        conditions: data.conditions || [],
+        post_action: data.post_action || 'create_record',
+        calendar_enabled: !!data.calendar_enabled,
+        is_active: data.is_active !== false && (data as any).isActive !== false,
+        created_at: now,
+        updated_at: now,
+        ...rest,
+        name,
       }
-      write(KEYS.workflows, [...all, item])
+      write('workflows', KEYS.workflows, [item, ...all])
       return item
     },
-    update(id: string, data: Partial<Workflow>): Workflow | null {
-      const all = read<Workflow>(KEYS.workflows)
+    update(id: string, data: Partial<Workflow> & Record<string, any>): Workflow | null {
+      seedIfNeeded()
+      const all = read<Workflow>('workflows', KEYS.workflows)
       const idx = all.findIndex(w => w.id === id)
       if (idx === -1) return null
-      all[idx] = { ...all[idx], ...data, updatedAt: new Date().toISOString() }
-      write(KEYS.workflows, all)
+      const updated = {
+        ...all[idx],
+        ...data,
+        business_id: data.business_id || data.businessId || all[idx].business_id,
+        is_active: data.is_active !== undefined ? data.is_active : data.isActive !== undefined ? data.isActive : all[idx].is_active,
+        updated_at: new Date().toISOString(),
+      }
+      all[idx] = updated
+      write('workflows', KEYS.workflows, all)
       return all[idx]
     },
     delete(id: string) {
-      write(KEYS.workflows, read<Workflow>(KEYS.workflows).filter(w => w.id !== id))
+      seedIfNeeded()
+      const all = read<Workflow>('workflows', KEYS.workflows)
+      write('workflows', KEYS.workflows, all.filter(w => w.id !== id))
     },
   },
 
   calls: {
-    list(userId: string): CallRecord[] {
-      return read<CallRecord>(KEYS.calls)
-        .filter(c => c.userId === userId)
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    list(_userId?: string): CallRecord[] {
+      seedIfNeeded(_userId)
+      const rawCalls = read<Call>('calls', KEYS.calls)
+      const bizs = read<Business>('businesses', KEYS.businesses)
+      const bmap: Record<string, Business> = {}
+      bizs.forEach(b => { bmap[b.id] = b })
+
+      return rawCalls
+        .map(c => ({
+          ...c,
+          business: bmap[c.business_id],
+          // Compatibility aliases
+          businessId: c.business_id,
+          workflowId: c.workflow_id,
+          callerName: c.caller_name,
+          callerPhone: c.caller_phone,
+          duration: c.duration_seconds,
+          createdAt: c.created_at,
+          toolsUsed: (c as any).tools_used || (c as any).toolsUsed || [],
+        }))
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     },
     get(id: string): CallRecord | null {
-      return read<CallRecord>(KEYS.calls).find(c => c.id === id) ?? null
+      const all = localDB.calls.list()
+      return all.find(c => c.id === id) ?? null
     },
-    create(data: Omit<CallRecord, 'id' | 'createdAt'>): CallRecord {
-      const all = read<CallRecord>(KEYS.calls)
-      const item: CallRecord = {
-        ...data,
+    create(data: Partial<Call> & Record<string, any>): CallRecord {
+      seedIfNeeded()
+      const all = read<Call>('calls', KEYS.calls)
+      const now = new Date().toISOString()
+      const item: Call = {
         id: 'call_' + uid(),
-        createdAt: new Date().toISOString(),
+        business_id: data.business_id || data.businessId || 'biz_bakery',
+        workflow_id: data.workflow_id || data.workflowId || 'wf_cake_intake',
+        caller_name: data.caller_name || data.callerName || 'Anonymous',
+        caller_phone: data.caller_phone || data.callerPhone || '+91 98000 00000',
+        status: data.status || 'completed',
+        intent: data.intent || 'General Enquiry',
+        summary: data.summary || 'Customer called regarding business inquiries.',
+        urgency: data.urgency || 'normal',
+        follow_up_status: data.follow_up_status || data.followUpStatus || 'pending',
+        transcript: data.transcript || [],
+        collected_data: data.collected_data || data.collectedData || {},
+        language_used: data.language_used || data.languageUsed || 'en',
+        duration_seconds: data.duration_seconds || data.duration || 60,
+        calendar_event_id: data.calendar_event_id || data.calendarEventId,
+        calendar_event_url: data.calendar_event_url || data.calendarEventUrl,
+        created_at: now,
+        updated_at: now,
+        ...data,
       }
-      write(KEYS.calls, [...all, item])
-      return item
+      write('calls', KEYS.calls, [item, ...all])
+      return {
+        ...item,
+        businessId: item.business_id,
+        workflowId: item.workflow_id,
+        callerName: item.caller_name,
+        callerPhone: item.caller_phone,
+        duration: item.duration_seconds,
+        createdAt: item.created_at,
+      }
     },
-    update(id: string, data: Partial<CallRecord>): CallRecord | null {
-      const all = read<CallRecord>(KEYS.calls)
+    update(id: string, data: Partial<Call> & Record<string, any>): CallRecord | null {
+      seedIfNeeded()
+      const all = read<Call>('calls', KEYS.calls)
       const idx = all.findIndex(c => c.id === id)
       if (idx === -1) return null
-      all[idx] = { ...all[idx], ...data }
-      write(KEYS.calls, all)
-      return all[idx]
+      const updated = {
+        ...all[idx],
+        ...data,
+        updated_at: new Date().toISOString(),
+      }
+      all[idx] = updated
+      write('calls', KEYS.calls, all)
+      return {
+        ...updated,
+        businessId: updated.business_id,
+        workflowId: updated.workflow_id,
+        callerName: updated.caller_name,
+        callerPhone: updated.caller_phone,
+        duration: updated.duration_seconds,
+        createdAt: updated.created_at,
+      }
     },
     delete(id: string) {
-      write(KEYS.calls, read<CallRecord>(KEYS.calls).filter(c => c.id !== id))
+      seedIfNeeded()
+      const all = read<Call>('calls', KEYS.calls)
+      write('calls', KEYS.calls, all.filter(c => c.id !== id))
     },
-    stats(userId: string) {
-      const calls = localDB.calls.list(userId)
+    stats(_userId?: string) {
+      const calls = localDB.calls.list(_userId)
+      const now = new Date()
       return {
         total: calls.length,
         completed: calls.filter(c => c.status === 'completed').length,
         missed: calls.filter(c => c.status === 'missed').length,
+        urgent: calls.filter(c => c.urgency === 'urgent').length,
+        pending: calls.filter(c => c.follow_up_status === 'pending' || (c as any).followUpStatus === 'pending').length,
         today: calls.filter(c => {
-          const d = new Date(c.createdAt)
-          const now = new Date()
-          return d.getDate() === now.getDate() && d.getMonth() === now.getMonth()
+          const d = new Date(c.created_at)
+          return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
         }).length,
       }
     },

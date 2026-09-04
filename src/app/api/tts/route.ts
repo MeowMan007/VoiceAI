@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || ''
-// Default to a free multilingual voice (Rachel)
-const DEFAULT_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM'
-const HINDI_VOICE_ID = process.env.ELEVENLABS_HINDI_VOICE_ID || 'pNInz6obpgDQGcFmaJgB'
+// Default to pre-made voices available on ElevenLabs free tier (Laura: FGY2WhTYpPnrIDTdsKH5)
+const DEFAULT_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'FGY2WhTYpPnrIDTdsKH5'
+const HINDI_VOICE_ID = process.env.ELEVENLABS_HINDI_VOICE_ID || 'FGY2WhTYpPnrIDTdsKH5'
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,7 +14,9 @@ export async function POST(request: NextRequest) {
     }
 
     const cleanText = text.slice(0, 500) // Limit length for free tier
-    const activeKey = (apiKey && typeof apiKey === 'string' && apiKey.trim()) ? apiKey.trim() : ELEVENLABS_API_KEY
+    const activeKey = (apiKey && typeof apiKey === 'string' && apiKey.trim())
+      ? apiKey.trim()
+      : (process.env.ELEVENLABS_API_KEY || ELEVENLABS_API_KEY)
 
     // If no ElevenLabs key, return a mock audio response instruction
     if (!activeKey) {
@@ -24,9 +26,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const voiceId = language === 'hi' ? HINDI_VOICE_ID : DEFAULT_VOICE_ID
+    let voiceId = language === 'hi' ? HINDI_VOICE_ID : DEFAULT_VOICE_ID
 
-    const response = await fetch(
+    let response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`,
       {
         method: 'POST',
@@ -48,11 +50,31 @@ export async function POST(request: NextRequest) {
       }
     )
 
+    // If voice fails with 402/400 (e.g. library voice requiring paid plan), retry with universal pre-made voice
+    if (!response.ok && (response.status === 402 || response.status === 400) && voiceId !== 'FGY2WhTYpPnrIDTdsKH5') {
+      voiceId = 'FGY2WhTYpPnrIDTdsKH5'
+      response = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`,
+        {
+          method: 'POST',
+          headers: {
+            'xi-api-key': activeKey,
+            'Content-Type': 'application/json',
+            Accept: 'audio/mpeg',
+          },
+          body: JSON.stringify({
+            text: cleanText,
+            model_id: language === 'hi' ? 'eleven_multilingual_v2' : 'eleven_turbo_v2_5',
+          }),
+        }
+      )
+    }
+
     if (!response.ok) {
       const errText = await response.text()
       console.error('ElevenLabs TTS error:', response.status, errText)
       return NextResponse.json(
-        { error: `ElevenLabs error: ${response.status}` },
+        { error: `ElevenLabs error: ${response.status}`, details: errText },
         { status: response.status }
       )
     }

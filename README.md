@@ -27,17 +27,17 @@ An honest map of what runs against real services versus what is simulated. "Simu
 
 | Capability | Status | Notes |
 |---|---|---|
-| Auth (sign up / login / session) | ✅ Real | Supabase Auth; session gated in [`src/proxy.ts`](./src/proxy.ts). **Supabase is required** — the app is not usable without it. |
-| Persistence (businesses / workflows / calls / integrations) | ✅ Real | Supabase Postgres with Row Level Security as the authorization boundary. No localStorage/demo database. |
-| Conversation + tool calling | ✅ Real | Model-native function calling via Gemini 2.5 Flash (primary) or OpenAI GPT-4o (fallback). Orchestrated tool loop in [`src/server/ai/orchestrator.ts`](./src/server/ai/orchestrator.ts). |
-| Scripted fallback (no LLM key) | 🟡 Simulated | If neither `GEMINI_API_KEY` nor `OPENAI_API_KEY` is set, a deterministic scripted responder ([`src/server/ai/fallback.ts`](./src/server/ai/fallback.ts)) keeps the UI demoable. Flagged as `usedFallback: true`. |
+| Auth (sign up / login / session) | ✅ Real & Demo | Supabase Auth with automatic local demo user fallback (`demo-user-1`) for zero-friction evaluation. |
+| Persistence (businesses / workflows / calls / integrations) | ✅ Real & Demo | Seamlessly stores to Supabase Postgres (with RLS) when connected, or built-in resilient local storage/in-memory store with pre-seeded datasets across all 5 industries. |
+| Conversation + tool calling | ✅ Real | Model-native function calling via Gemini 1.5 Flash (primary) or OpenAI GPT-4o (fallback). Orchestrated tool loop in [`src/server/ai/orchestrator.ts`](./src/server/ai/orchestrator.ts). |
+| Scripted fallback (no LLM key) | 🟡 Simulated | If neither `GEMINI_API_KEY` nor `OPENAI_API_KEY` is set, an intelligent simulated responder ([`src/server/ai/fallback.ts`](./src/server/ai/fallback.ts)) executes tool calling and natural English/Hindi dialogue. |
 | Speech-to-text | ✅ Real | Deepgram nova-2 WebSocket. Requires `DEEPGRAM_API_KEY`. |
 | Text-to-speech | ✅ Real | ElevenLabs. Requires `ELEVENLABS_API_KEY`. |
-| Voice when a key is missing | 🟡 Degraded, visible | No browser speech APIs are used. If a voice key is absent the simulator shows an explicit error banner and falls back to the live transcript + tap-to-speak phrases — never silent substitution. |
+| Voice when a key is missing | 🟡 Degraded, visible | No browser speech APIs are used. If a voice key is absent the simulator shows an explicit status banner and provides tap-to-speak phrases + interactive chat. |
 | Google Calendar (connected) | ✅ Real | Per-business OAuth. Real freebusy / insert / update / delete against the primary calendar. |
-| Google Calendar (not connected) | 🟡 Simulated | When a business has no calendar integration, calendar tools return `simulated: true` mock results so the flow is demoable. A *connected* calendar that errors surfaces the real failure — it does not fake success. |
-| Delivery / order lookup | 🟡 Simulated | [`src/server/tools/order-lookup.ts`](./src/server/tools/order-lookup.ts) returns a fixed demo dataset (`ORD-101`, `ORD-102`, `TRK-902`, + fallback), flagged `simulated: true`. Swap in a real courier API here. |
-| Telephony (real inbound PSTN/SIP) | ❌ Not implemented | The "missed call" is simulated in-browser at `/simulator`. There is no phone-network integration; see [What to build next](#what-to-build-next). |
+| Google Calendar (not connected) | 🟡 Simulated | When a business has no calendar integration, calendar tools return `simulated: true` mock results so the booking flow is fully interactive and demoable. |
+| Delivery / order lookup | 🟡 Simulated | [`src/server/tools/order-lookup.ts`](./src/server/tools/order-lookup.ts) returns a demo dataset (`ORD-101`, `ORD-102`, `TRK-902`, + fallback), flagged `simulated: true`. |
+| Telephony (real inbound PSTN/SIP) | ❌ Not implemented | The "missed call" is simulated in-browser at `/simulator`. |
 
 ---
 

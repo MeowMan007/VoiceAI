@@ -103,7 +103,7 @@ export default function BusinessesPage() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  {new Date(biz.createdAt).toLocaleDateString()}
+                  {new Date(biz.created_at || (biz as any).createdAt).toLocaleDateString()}
                 </span>
                 <Link
                   href={`/workflows/new?business_id=${biz.id}`}

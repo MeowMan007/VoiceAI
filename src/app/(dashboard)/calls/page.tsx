@@ -5,10 +5,11 @@ import { getUser } from '@/lib/demo-auth'
 import { localDB, CallRecord, Business } from '@/lib/local-db'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
-import { PhoneCall, Search, ChevronRight } from 'lucide-react'
+import { PhoneCall, Search, ChevronRight, Calendar, AlertTriangle, CheckCircle2, Filter } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-function formatRelativeTime(iso: string): string {
+function formatRelativeTime(iso?: string): string {
+  if (!iso) return '—'
   const diff = Date.now() - new Date(iso).getTime()
   const mins = Math.floor(diff / 60000)
   if (mins < 60) return `${mins}m ago`
@@ -25,7 +26,8 @@ export default function CallsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [selectedBusiness, setSelectedBusiness] = useState<string>('all')
-  const [selectedStatus, setSelectedStatus] = useState<string>('all')
+  const [selectedFollowUp, setSelectedFollowUp] = useState<string>('all')
+  const [selectedUrgency, setSelectedUrgency] = useState<string>('all')
 
   useEffect(() => {
     const user = getUser()
@@ -44,24 +46,28 @@ export default function CallsPage() {
 
   const filtered = useMemo(() => {
     return calls.filter(c => {
-      const biz = businessMap[c.businessId]
-      const matchSearch = !search ||
-        c.callerName?.toLowerCase().includes(search.toLowerCase()) ||
-        c.callerPhone?.includes(search) ||
-        c.summary?.toLowerCase().includes(search.toLowerCase()) ||
-        biz?.name.toLowerCase().includes(search.toLowerCase())
-      const matchBiz = selectedBusiness === 'all' || c.businessId === selectedBusiness
-      const matchStatus = selectedStatus === 'all' || c.status === selectedStatus
-      return matchSearch && matchBiz && matchStatus
-    })
-  }, [calls, search, selectedBusiness, selectedStatus, businessMap])
+      const bizId = c.business_id || c.businessId || ''
+      const biz = businessMap[bizId]
+      const name = c.caller_name || c.callerName || ''
+      const phone = c.caller_phone || c.callerPhone || ''
+      const summary = c.summary || ''
+      const intent = c.intent || ''
 
-  const handleDelete = (id: string) => {
-    if (!confirm('Delete this call record?')) return
-    localDB.calls.delete(id)
-    setCalls(prev => prev.filter(c => c.id !== id))
-    toast.success('Call record deleted')
-  }
+      const matchSearch = !search ||
+        name.toLowerCase().includes(search.toLowerCase()) ||
+        phone.includes(search) ||
+        summary.toLowerCase().includes(search.toLowerCase()) ||
+        intent.toLowerCase().includes(search.toLowerCase()) ||
+        (biz?.name || '').toLowerCase().includes(search.toLowerCase())
+
+      const matchBiz = selectedBusiness === 'all' || bizId === selectedBusiness
+      const followUp = c.follow_up_status || (c as any).followUpStatus || 'pending'
+      const matchFollowUp = selectedFollowUp === 'all' || followUp === selectedFollowUp
+      const matchUrgency = selectedUrgency === 'all' || c.urgency === selectedUrgency
+
+      return matchSearch && matchBiz && matchFollowUp && matchUrgency
+    })
+  }, [calls, search, selectedBusiness, selectedFollowUp, selectedUrgency, businessMap])
 
   if (loading) {
     return (
@@ -75,12 +81,15 @@ export default function CallsPage() {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Call Records</h1>
+          <h1 className="page-title">Customer Calls &amp; Follow-Ups</h1>
           <p className="page-subtitle">
-            All missed calls handled by your Voice AI assistant — with transcripts and summaries.
+            All missed calls handled by your Voice AI assistant — classified with customer intent, captured details, and urgency.
           </p>
         </div>
-        <span className="badge badge-completed">{calls.length} Total</span>
+        <div className="flex items-center gap-2">
+          <span className="badge badge-completed">{calls.length} Total</span>
+          <span className="badge badge-urgent">{calls.filter(c => c.urgency === 'urgent').length} Urgent</span>
+        </div>
       </div>
 
       {/* Filters */}
@@ -92,22 +101,29 @@ export default function CallsPage() {
             type="text"
             className="input-field"
             style={{ paddingLeft: '36px' }}
-            placeholder="Search caller name, phone, or summary..."
+            placeholder="Search caller name, phone, intent, or keywords..."
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
         </div>
 
-        <select id="filter-business" className="input-field" style={{ width: 'auto' }} value={selectedBusiness} onChange={e => setSelectedBusiness(e.target.value)}>
+        <select id="filter-business" className="input-field" style={{ width: 'auto', fontSize: '12px' }} value={selectedBusiness} onChange={e => setSelectedBusiness(e.target.value)}>
           <option value="all">All Businesses</option>
           {businesses.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
 
-        <select id="filter-status" className="input-field" style={{ width: 'auto' }} value={selectedStatus} onChange={e => setSelectedStatus(e.target.value)}>
-          <option value="all">All Status</option>
-          <option value="completed">Completed</option>
-          <option value="missed">Missed</option>
-          <option value="in-progress">In Progress</option>
+        <select id="filter-urgency" className="input-field" style={{ width: 'auto', fontSize: '12px' }} value={selectedUrgency} onChange={e => setSelectedUrgency(e.target.value)}>
+          <option value="all">All Priorities</option>
+          <option value="urgent">⚡ Urgent Priority</option>
+          <option value="normal">Normal Priority</option>
+        </select>
+
+        <select id="filter-followup" className="input-field" style={{ width: 'auto', fontSize: '12px' }} value={selectedFollowUp} onChange={e => setSelectedFollowUp(e.target.value)}>
+          <option value="all">All Follow-Up</option>
+          <option value="pending">Pending Follow-Up</option>
+          <option value="contacted">Contacted</option>
+          <option value="resolved">Resolved / Completed</option>
+          <option value="closed">Closed</option>
         </select>
       </div>
 
@@ -116,7 +132,7 @@ export default function CallsPage() {
         {filtered.length === 0 ? (
           <div style={{ padding: '48px 24px', textAlign: 'center' }}>
             <PhoneCall size={32} style={{ color: 'var(--text-muted)', margin: '0 auto 12px' }} />
-            <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>No call records found.</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>No call records found matching criteria.</p>
             <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '4px' }}>
               Run the Voice Simulator to generate call records.
             </p>
@@ -128,50 +144,80 @@ export default function CallsPage() {
           <div>
             {/* Table header */}
             <div style={{
-              display: 'grid', gridTemplateColumns: '1fr 1.5fr 1fr auto auto',
-              padding: '10px 20px', borderBottom: '1px solid var(--border-subtle)',
+              display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 1.2fr 1fr auto',
+              padding: '12px 20px', borderBottom: '1px solid var(--border-subtle)',
               fontSize: '11px', fontWeight: 600, textTransform: 'uppercase',
               letterSpacing: '0.06em', color: 'var(--text-muted)'
             }}>
-              <span>Caller</span>
-              <span>Business</span>
-              <span>Status</span>
-              <span>Duration</span>
-              <span>Time</span>
+              <span>Caller &amp; Phone</span>
+              <span>Business &amp; Intent</span>
+              <span>Follow-Up &amp; Priority</span>
+              <span>Date / Time</span>
+              <span></span>
             </div>
+
             {filtered.map(call => {
-              const biz = businessMap[call.businessId]
+              const bizId = call.business_id || call.businessId || ''
+              const biz = businessMap[bizId]
+              const isUrgent = call.urgency === 'urgent'
+              const followUp = call.follow_up_status || (call as any).followUpStatus || 'pending'
+              const callerName = call.caller_name || call.callerName || 'Anonymous Caller'
+              const callerPhone = call.caller_phone || call.callerPhone || 'Direct line'
+              const createdAt = call.created_at || (call as any).createdAt
+
               return (
                 <Link
                   key={call.id}
                   href={`/calls/${call.id}`}
-                  style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 1fr auto auto', padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)', textDecoration: 'none', alignItems: 'center', gap: '12px', transition: 'background 0.15s' }}
+                  style={{
+                    display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 1.2fr 1fr auto',
+                    padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)',
+                    textDecoration: 'none', alignItems: 'center', gap: '12px', transition: 'background 0.15s'
+                  }}
                   onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-elevated)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                 >
                   <div>
-                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>{call.callerName || 'Anonymous'}</p>
-                    <p style={{ fontSize: '11px', fontFamily: 'monospace', color: 'var(--text-muted)', marginTop: '2px' }}>{call.callerPhone || '—'}</p>
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>{callerName}</p>
+                    <p style={{ fontSize: '11px', fontFamily: 'monospace', color: 'var(--text-muted)', marginTop: '2px' }}>{callerPhone}</p>
                   </div>
+
                   <div>
-                    <p style={{ fontSize: '13px', fontWeight: 500, color: '#fff' }}>{biz?.name || 'Unknown'}</p>
-                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{call.summary?.slice(0, 50) || '—'}</p>
+                    <p style={{ fontSize: '13px', fontWeight: 500, color: '#fff' }}>{biz?.name || 'General Business'}</p>
+                    <p style={{ fontSize: '11px', color: 'var(--green)', marginTop: '2px' }}>
+                      {call.intent || call.summary?.slice(0, 45) || 'General Inquiry'}
+                    </p>
                   </div>
-                  <div>
-                    <span className={cn('badge', {
-                      'badge-completed': call.status === 'completed',
-                      'badge-urgent': call.status === 'missed',
-                      'badge-pending': call.status === 'in-progress',
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span className={cn('badge text-[10px]', {
+                      'badge-urgent': followUp === 'pending',
+                      'badge-contacted': followUp === 'contacted',
+                      'badge-completed': followUp === 'resolved',
+                      'badge-closed': followUp === 'closed',
                     })}>
-                      {call.status}
+                      {followUp.toUpperCase()}
                     </span>
+
+                    {isUrgent && (
+                      <span className="badge badge-urgent text-[10px] flex items-center gap-1">
+                        <AlertTriangle size={10} /> URGENT
+                      </span>
+                    )}
+
+                    {call.calendar_event_id && (
+                      <span className="badge badge-contacted text-[10px] flex items-center gap-1" title="Google Calendar Event Created">
+                        <Calendar size={10} /> Cal
+                      </span>
+                    )}
                   </div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    {call.duration ? `${call.duration}s` : '—'}
+
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    {formatRelativeTime(createdAt)}
                   </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    {formatRelativeTime(call.createdAt)}
-                    <ChevronRight size={12} />
+
+                  <div style={{ display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }}>
+                    <ChevronRight size={14} />
                   </div>
                 </Link>
               )

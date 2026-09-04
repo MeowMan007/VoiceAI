@@ -138,7 +138,7 @@ async function completeGemini(
   const systemInstruction = messages.find(m => m.role === 'system')?.content || undefined
 
   const model = genAI.getGenerativeModel({
-    model: options?.model || 'gemini-2.5-flash',
+    model: options?.model || 'gemini-1.5-flash',
     systemInstruction,
     tools: tools?.length ? (openaiToolsToGemini(tools) as never) : undefined,
   })
