@@ -72,10 +72,24 @@ function openaiToolsToGemini(tools: OpenAI.Chat.ChatCompletionTool[]) {
   ]
 }
 
+const FAST_GEMINI_MODELS = [
+  'gemini-3.1-flash-lite',
+  'gemini-3.5-flash-lite',
+  'gemini-flash-lite-latest',
+]
+
 function sanitizeGeminiModel(model?: string): string {
-  if (!model) return 'gemini-3.6-flash'
-  if (model.includes('1.5') || model.includes('2.0') || model.includes('2.5') || model.includes('gemini-pro')) {
-    return 'gemini-3.6-flash'
+  if (!model) return 'gemini-3.1-flash-lite'
+  if (
+    model.includes('1.5') ||
+    model.includes('2.0') ||
+    model.includes('2.5') ||
+    model.includes('gemini-pro') ||
+    model === 'gemini-3.6-flash' ||
+    model === 'gemini-3.7-flash' ||
+    model === 'gemini-3.8-flash'
+  ) {
+    return 'gemini-3.1-flash-lite'
   }
   return model
 }
@@ -166,30 +180,41 @@ async function completeGemini(
   const genAI = new GoogleGenerativeAI(geminiKey)
   const systemInstruction = messages.find(m => m.role === 'system')?.content || undefined
 
-  const modelName = sanitizeGeminiModel(options?.model)
-  let model = genAI.getGenerativeModel({
-    model: modelName,
-    systemInstruction,
-    tools: tools?.length ? (openaiToolsToGemini(tools) as never) : undefined,
-  })
+  const preferredModel = sanitizeGeminiModel(options?.model)
+  const candidateModels = [
+    preferredModel,
+    ...FAST_GEMINI_MODELS.filter(m => m !== preferredModel),
+  ]
 
   const contents = toGeminiContents(messages)
-  let result
-  for (let attempt = 0; attempt < 3; attempt++) {
+  const formattedTools = tools?.length ? (openaiToolsToGemini(tools) as never) : undefined
+
+  let result: any = null
+  let lastError: any = null
+
+  for (const modelName of candidateModels) {
     try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction,
+        tools: formattedTools,
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 300,
+        },
+      })
+
       result = await model.generateContent({ contents: contents as never })
-      break
+      if (result) break
     } catch (err: any) {
-      const isOverloaded = err?.status === 503 || err?.message?.includes('503') || err?.message?.includes('high demand') || err?.message?.includes('overloaded')
-      if (isOverloaded && attempt < 2) {
-        await new Promise(resolve => setTimeout(resolve, 800 * (attempt + 1)))
-        continue
-      }
+      lastError = err
+      console.warn(`[Gemini] ${modelName} error (${err?.status || err?.message?.slice(0, 60)}), trying next fast model...`)
+      continue
     }
   }
 
   if (!result) {
-    throw new Error('Gemini failed to generate a response')
+    throw lastError || new Error('All fast Gemini models failed to generate a response')
   }
 
   const functionCalls = result.response.functionCalls?.() || []
@@ -204,8 +229,8 @@ async function completeGemini(
         role: 'assistant',
         content: null,
         refusal: null,
-        tool_calls: functionCalls.map((fc, i) => ({
-          id: (fc as any).id || `gemini_${Date.now()}_${i}`,
+        tool_calls: functionCalls.map((fc: any, i: number) => ({
+          id: fc.id || `gemini_${Date.now()}_${i}`,
           type: 'function' as const,
           function: {
             name: fc.name,
@@ -247,27 +272,21 @@ export async function completeChat(
     } catch (err) {
       console.warn('Gemini complete failed:', err)
     }
-  }
-
-  if (preferred === 'openai' && isOpenAIAvailable) {
+  } else if (preferred === 'openai' && isOpenAIAvailable) {
     try {
       return await completeOpenAI(messages, tools, options)
     } catch (err) {
       console.warn('OpenAI complete failed:', err)
     }
-  }
-
-  // Default: Prioritize Gemini when configured (per user request: "instead of using chatgpt api, i have used gemini api key")
-  if (isGeminiAvailable && preferred !== 'simulator' && preferred !== 'openai') {
+  } else if (isGeminiAvailable && preferred !== 'simulator' && preferred !== 'openai') {
+    // Default: Prioritize Gemini when configured (per user request: "instead of using chatgpt api, i have used gemini api key")
     try {
       return await completeGemini(messages, tools, options)
     } catch (err) {
       console.warn('Gemini primary complete failed, trying fallback:', err)
     }
-  }
-
-  // Fallback to OpenAI if configured
-  if (isOpenAIAvailable && preferred !== 'simulator') {
+  } else if (isOpenAIAvailable && preferred !== 'simulator') {
+    // Fallback to OpenAI if configured
     try {
       return await completeOpenAI(messages, tools, options)
     } catch (err) {

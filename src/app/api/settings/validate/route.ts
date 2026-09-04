@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     if (provider === 'gemini') {
       const { GoogleGenerativeAI } = await import('@google/generative-ai')
       const genAI = new GoogleGenerativeAI(apiKey)
-      const selectedModel = model || 'gemini-3.6-flash'
+      const selectedModel = model || 'gemini-3.1-flash-lite'
       const m = genAI.getGenerativeModel({ model: selectedModel })
       
       const response = await m.generateContent('Ping test. Reply with "OK".')

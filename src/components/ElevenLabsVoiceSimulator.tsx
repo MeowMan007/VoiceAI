@@ -146,6 +146,9 @@ export default function ElevenLabsVoiceSimulator({
     }
     onMessage(userMsg)
 
+    const abortCtrl = new AbortController()
+    const timeoutId = setTimeout(() => abortCtrl.abort(), 12000)
+
     try {
       const bizName = workflow.business?.name || 'our business'
       const chatMessages = [
@@ -157,12 +160,15 @@ export default function ElevenLabsVoiceSimulator({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        signal: abortCtrl.signal,
         body: JSON.stringify({
           messages: chatMessages,
           workflow: { ...workflow, business: { ...(workflow.business || {}), name: bizName } },
-          aiConfig: { provider: 'gemini' },
+          aiConfig: { provider: 'gemini', model: 'gemini-3.1-flash-lite' },
         }),
       })
+
+      clearTimeout(timeoutId)
 
       if (!response.ok) throw new Error(`chat_${response.status}`)
       const data = await response.json()
@@ -195,9 +201,24 @@ export default function ElevenLabsVoiceSimulator({
       }
       onMessage(assistantMsg)
       await speakText(assistantText)
-    } catch {
+    } catch (err: any) {
+      clearTimeout(timeoutId)
       settleAfterSpeak()
-      toast.error('AI response error')
+      if (err?.name === 'AbortError') {
+        const timeoutReply = workflow.language === 'hi'
+          ? 'माफ़ कीजिए, नेटवर्क में थोड़ा समय लग रहा है। कृपया अपनी बात दोहराएं।'
+          : 'I apologize for the brief delay. Could you please repeat that?'
+        const timeoutMsg: SimulatorMessage = {
+          id: uuidv4(),
+          role: 'assistant',
+          content: timeoutReply,
+          timestamp: new Date(),
+        }
+        onMessage(timeoutMsg)
+        speakText(timeoutReply)
+      } else {
+        toast.error('AI response error')
+      }
     }
   }, [messages, workflow, onMessage, onToolLog, onData, speakText, settleAfterSpeak])
 

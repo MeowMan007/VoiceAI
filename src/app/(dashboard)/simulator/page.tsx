@@ -193,7 +193,7 @@ function SimulatorContent() {
       const data = await apiSend<ChatResponse>('/api/chat', 'POST', {
         messages: apiMessages,
         workflow: selectedWorkflow,
-        aiConfig: { provider: 'gemini' },
+        aiConfig: { provider: 'gemini', model: 'gemini-3.1-flash-lite' },
       })
 
       if (data.toolsUsed?.length) {
