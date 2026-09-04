@@ -49,13 +49,24 @@ function toOpenAIMessages(messages: ChatMessage[]): OpenAI.Chat.ChatCompletionMe
   }) as OpenAI.Chat.ChatCompletionMessageParam[]
 }
 
+function cleanSchemaForGemini(schema: unknown): unknown {
+  if (!schema || typeof schema !== 'object') return schema
+  if (Array.isArray(schema)) return schema.map(cleanSchemaForGemini)
+  const copy: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(schema as Record<string, unknown>)) {
+    if (k === 'additionalProperties') continue
+    copy[k] = cleanSchemaForGemini(v)
+  }
+  return copy
+}
+
 function openaiToolsToGemini(tools: OpenAI.Chat.ChatCompletionTool[]) {
   return [
     {
       functionDeclarations: tools.map(t => ({
         name: t.function.name,
         description: t.function.description,
-        parameters: t.function.parameters as Record<string, unknown>,
+        parameters: cleanSchemaForGemini(t.function.parameters) as Record<string, unknown>,
       })),
     },
   ]
@@ -164,20 +175,23 @@ async function completeGemini(
 
   const contents = toGeminiContents(messages)
   let result
-  try {
-    result = await model.generateContent({ contents: contents as never })
-  } catch (err: any) {
-    if (err?.message?.includes('not found') || err?.message?.includes('no longer available')) {
-      model = genAI.getGenerativeModel({
-        model: 'gemini-3.6-flash',
-        systemInstruction,
-        tools: tools?.length ? (openaiToolsToGemini(tools) as never) : undefined,
-      })
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
       result = await model.generateContent({ contents: contents as never })
-    } else {
-      throw err
+      break
+    } catch (err: any) {
+      const isOverloaded = err?.status === 503 || err?.message?.includes('503') || err?.message?.includes('high demand') || err?.message?.includes('overloaded')
+      if (isOverloaded && attempt < 2) {
+        await new Promise(resolve => setTimeout(resolve, 800 * (attempt + 1)))
+        continue
+      }
     }
   }
+
+  if (!result) {
+    throw new Error('Gemini failed to generate a response')
+  }
+
   const functionCalls = result.response.functionCalls?.() || []
   const rawParts = result.response.candidates?.[0]?.content?.parts || []
 

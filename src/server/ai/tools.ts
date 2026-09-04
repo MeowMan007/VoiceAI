@@ -113,7 +113,6 @@ export function buildDataCaptureTool(fields: WorkflowField[]): OpenAI.Chat.ChatC
       parameters: {
         type: 'object',
         properties,
-        additionalProperties: false,
       },
     },
   }
