@@ -137,14 +137,29 @@ async function completeGemini(
   const genAI = new GoogleGenerativeAI(geminiKey)
   const systemInstruction = messages.find(m => m.role === 'system')?.content || undefined
 
-  const model = genAI.getGenerativeModel({
-    model: options?.model || 'gemini-1.5-flash',
+  const modelName = options?.model || 'gemini-3.6-flash'
+  let model = genAI.getGenerativeModel({
+    model: modelName,
     systemInstruction,
     tools: tools?.length ? (openaiToolsToGemini(tools) as never) : undefined,
   })
 
   const contents = toGeminiContents(messages)
-  const result = await model.generateContent({ contents: contents as never })
+  let result
+  try {
+    result = await model.generateContent({ contents: contents as never })
+  } catch (err: any) {
+    if (err?.message?.includes('not found') || err?.message?.includes('no longer available')) {
+      model = genAI.getGenerativeModel({
+        model: 'gemini-flash-latest',
+        systemInstruction,
+        tools: tools?.length ? (openaiToolsToGemini(tools) as never) : undefined,
+      })
+      result = await model.generateContent({ contents: contents as never })
+    } else {
+      throw err
+    }
+  }
   const functionCalls = result.response.functionCalls?.() || []
 
   if (functionCalls.length) {

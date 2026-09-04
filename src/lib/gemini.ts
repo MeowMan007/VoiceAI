@@ -17,7 +17,7 @@ export async function generateGeminiChatResponse(
   if (!genAI) return null
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' })
     const chat = model.startChat({ history })
     const result = await chat.sendMessage(prompt)
     const response = await result.response
