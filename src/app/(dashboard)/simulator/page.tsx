@@ -104,7 +104,7 @@ function SimulatorContent() {
 
   const fallbackBrowserSpeech = useCallback((text: string, language?: string) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      setTtsError('Spoken audio unavailable — ElevenLabs returned 401 (missing text_to_speech permission).')
+      setTtsError('Spoken audio stream unavailable.')
       return
     }
     try {
@@ -123,10 +123,10 @@ function SimulatorContent() {
         if (enVoice) utterance.voice = enVoice
       }
 
-      setTtsError('ElevenLabs key returned 401 (missing text_to_speech permission) — Playing spoken audio via Web Speech synthesis.')
+      setTtsError('Audio fallback: playing voice via browser speech synthesis.')
       window.speechSynthesis.speak(utterance)
     } catch {
-      setTtsError('Spoken audio unavailable — ElevenLabs returned 401.')
+      setTtsError('Spoken audio unavailable.')
     }
   }, [])
 

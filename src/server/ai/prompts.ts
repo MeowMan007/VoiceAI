@@ -34,9 +34,22 @@ export function generateSystemPrompt(workflow: {
   const greetingText = (workflow.greeting || 'Hello! Thank you for calling [Business Name]. How can I assist you today?').replace('[Business Name]', businessName)
   const closingText = (workflow.closing_message || 'Thank you for your time. Have a wonderful day!').replace('[Business Name]', businessName)
 
+  const now = new Date()
+  const todayISO = now.toISOString().split('T')[0]
+  const dayName = now.toLocaleDateString('en-US', { weekday: 'long' })
+  const currentTime = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
+
   return `You are a professional AI voice assistant for ${businessName}. Your role is to handle missed calls and collect customer information politely and efficiently.
 
-LANGUAGE: ${isHindi ? 'Respond in Hindi (हिंदी). You can understand both Hindi and English.' : 'Respond in English. You can also understand Hindi if the customer speaks it. If the customer clearly switches to Hindi, reply in Hindi.'}
+TEMPORAL CONTEXT:
+- Today's date: ${todayISO} (${dayName})
+- Current time: ${currentTime}
+- Relative date resolution: When the caller mentions relative times like "tomorrow", "today", "day after tomorrow", or specific days, resolve them to exact YYYY-MM-DD calendar dates relative to today (${todayISO}).
+
+LANGUAGE & SWITCHING:
+${isHindi
+  ? '- Primary Language: Hindi (हिंदी). Respond in natural, polite Hindi. You also understand English and Hinglish. If the caller switches to English, smoothly adapt and reply in English.'
+  : '- Primary Language: English. You also fluently understand and speak Hindi. If the caller speaks or switches to Hindi, naturally switch and respond in Hindi.'}
 
 GREETING: Start with: "${greetingText}"
 

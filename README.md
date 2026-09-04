@@ -2,7 +2,7 @@
 
 A responsive web app for small-business owners to automate missed-call handling: the AI answers as a receptionist, captures structured customer details, qualifies leads, books appointments on Google Calendar via model-native tool calling, and tracks follow-ups — across multiple industries, in English and Hindi.
 
-Built with **Next.js 16 (App Router)**, **TypeScript**, **Supabase (Postgres + Auth + RLS)**, **Google Gemini 2.5 Flash** (primary LLM, OpenAI GPT-4o fallback), **Deepgram** (STT), **ElevenLabs** (TTS), and the **Google Calendar API**.
+Built with **Next.js 16 (App Router)**, **TypeScript**, **Supabase (Postgres + Auth + RLS)**, **Google Gemini 3.6 Flash** (primary LLM with native tool calling, OpenAI GPT-4o fallback), **Deepgram** (real-time WebSocket STT), **ElevenLabs** (neural multilingual TTS), and the **Google Calendar API**.
 
 ---
 
@@ -18,6 +18,7 @@ Built with **Next.js 16 (App Router)**, **TypeScript**, **Supabase (Postgres + A
 9. [Environment Variables](#environment-variables)
 10. [Scripts](#scripts)
 11. [Security Notes](#security-notes)
+12. [Submission Summary Note](#submission-summary-note)
 
 ---
 
@@ -29,7 +30,7 @@ An honest map of what runs against real services versus what is simulated. "Simu
 |---|---|---|
 | Auth (sign up / login / session) | ✅ Real & Demo | Supabase Auth with automatic local demo user fallback (`demo-user-1`) for zero-friction evaluation. |
 | Persistence (businesses / workflows / calls / integrations) | ✅ Real & Demo | Seamlessly stores to Supabase Postgres (with RLS) when connected, or built-in resilient local storage/in-memory store with pre-seeded datasets across all 5 industries. |
-| Conversation + tool calling | ✅ Real | Model-native function calling via Gemini 1.5 Flash (primary) or OpenAI GPT-4o (fallback). Orchestrated tool loop in [`src/server/ai/orchestrator.ts`](./src/server/ai/orchestrator.ts). |
+| Conversation + tool calling | ✅ Real | Model-native function calling via **Google Gemini 3.6 Flash** (primary) with thought-signature preservation or OpenAI GPT-4o (fallback). Orchestrated tool loop in [`src/server/ai/orchestrator.ts`](./src/server/ai/orchestrator.ts). |
 | Scripted fallback (no LLM key) | 🟡 Simulated | If neither `GEMINI_API_KEY` nor `OPENAI_API_KEY` is set, an intelligent simulated responder ([`src/server/ai/fallback.ts`](./src/server/ai/fallback.ts)) executes tool calling and natural English/Hindi dialogue. |
 | Speech-to-text | ✅ Real | Deepgram nova-2 WebSocket. Requires `DEEPGRAM_API_KEY`. |
 | Text-to-speech | ✅ Real | ElevenLabs. Requires `ELEVENLABS_API_KEY`. |
@@ -229,8 +230,28 @@ npm run check-rls   # lint supabase/schema.sql RLS invariants
 - **Calendar tokens are encrypted at rest** with AES-256-GCM (`INTEGRATION_CREDENTIALS_ENCRYPTION_KEY`).
 - **OAuth `state` is HMAC-signed** and time-limited to bind the callback to the initiating user + business; signing refuses to fall back to a dev secret in production.
 
-## What to Build Next
-1. **Real telephony** — bridge inbound PSTN/SIP (e.g. Twilio Programmable Voice) into the existing `/api/chat` turn loop.
-2. **Real courier API** — replace the simulated dataset in `src/server/tools/order-lookup.ts`.
-3. **WhatsApp summary** — push the collected-info summary to the owner via WhatsApp Business API.
-4. **Analytics** — call-volume trends, conversion, peak-hour heatmaps.
+---
+
+## Submission Summary Note
+
+### 1. What is Fully Working
+- **AI Conversation & Native Tool Calling**: Google Gemini (`gemini-3.6-flash`) functions as the primary reasoning engine with full thought-signature preservation. Gemini autonomously triggers function calls for Google Calendar checking/booking and external courier lookup.
+- **Speech-to-Text (STT)**: Real-time microphone audio streaming to Deepgram (`nova-2`) over secure WebSocket with live transcript visualization.
+- **Text-to-Speech (TTS)**: Realistic neural audio generation via ElevenLabs API (`eleven_turbo_v2_5` for English and `eleven_multilingual_v2` for Hindi) streamed and played back in real-time.
+- **Bilingual & Language Switching**: Natural conversations in both English and Hindi (हिंदी) with automatic spoken language detection.
+- **Custom Workflow Builder**: 6-step builder enabling configuration of triggers, greetings, custom fields, data types, required/optional flags, 5 conditional operators for urgency detection, Google Calendar tool toggling, and closing messages.
+- **Dashboard & Customer Call Records**: Comprehensive dashboard showing caller information, business used, date/time, intent, structured collected fields, AI summary, tool execution history, urgency flags, full transcript, and 1-click status updating (Pending, Contacted, Completed, Closed).
+- **Google Calendar OAuth2 & Encryption**: Real Google Calendar integration with encrypted token storage (AES-256-GCM) and signed OAuth state handling.
+- **All 5 Business Use Cases**: Pre-configured workflows and demo datasets for Cake Shop, Clinic / Doctor, Delivery & Logistics, Real Estate, and Home Repair / Maintenance.
+
+### 2. What is Simulated or Mocked
+- **Inbound PSTN/Carrier Call**: Missed calls are initiated and tested in the responsive web simulator rather than physical cellular/PSTN carrier lines.
+- **Google Calendar (when business not connected)**: When a business owner has not connected their Google account, the tool returns realistic availability and event IDs with `simulated: true` so workflows can be fully tested without mandatory OAuth setup.
+- **External Courier API**: `lookup_delivery_status` queries a structured in-memory logistics dataset (ORD-101, ORD-102, TRK-902) returning realistic courier statuses, locations, and ETAs.
+
+### 3. What to Build Next for Production
+1. **PSTN / Telephony Trunking**: Connect Twilio or Telnyx SIP trunks directly to the voice pipeline for real phone number missed-call interception.
+2. **Real Courier / Logistics APIs**: Integrate DHL, FedEx, Shiprocket, or Delhivery tracking APIs into the delivery tool.
+3. **Automated WhatsApp / SMS Dispatch**: Send instant WhatsApp / SMS confirmations to callers and structured lead summaries to business owners using Twilio or Gupshup.
+4. **CRM Integrations**: Two-way sync with HubSpot, Salesforce, or Zoho CRM for automated lead ingestion.
+

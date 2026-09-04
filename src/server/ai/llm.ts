@@ -61,6 +61,14 @@ function openaiToolsToGemini(tools: OpenAI.Chat.ChatCompletionTool[]) {
   ]
 }
 
+function sanitizeGeminiModel(model?: string): string {
+  if (!model) return 'gemini-3.6-flash'
+  if (model.includes('1.5') || model.includes('2.0') || model.includes('2.5') || model.includes('gemini-pro')) {
+    return 'gemini-3.6-flash'
+  }
+  return model
+}
+
 function toGeminiContents(messages: ChatMessage[]) {
   const contents: Array<{ role: 'user' | 'model'; parts: Array<Record<string, unknown>> }> = []
   const toolNames: Record<string, string> = {}
@@ -78,12 +86,22 @@ function toGeminiContents(messages: ChatMessage[]) {
         }
         contents.push({
           role: 'model',
-          parts: m.tool_calls.map(tc => ({
-            functionCall: {
-              name: tc.function.name,
-              args: JSON.parse(tc.function.arguments || '{}'),
-            },
-          })),
+          parts: m.tool_calls.map(tc => {
+            const raw = (tc as any)._rawPart
+            if (raw) return raw
+            let args: Record<string, unknown> = {}
+            try {
+              args = typeof tc.function.arguments === 'string' ? JSON.parse(tc.function.arguments || '{}') : (tc.function.arguments || {})
+            } catch {
+              args = {}
+            }
+            return {
+              functionCall: {
+                name: tc.function.name,
+                args,
+              },
+            }
+          }),
         })
       } else {
         contents.push({ role: 'model', parts: [{ text: m.content || '' }] })
@@ -137,7 +155,7 @@ async function completeGemini(
   const genAI = new GoogleGenerativeAI(geminiKey)
   const systemInstruction = messages.find(m => m.role === 'system')?.content || undefined
 
-  const modelName = options?.model || 'gemini-3.6-flash'
+  const modelName = sanitizeGeminiModel(options?.model)
   let model = genAI.getGenerativeModel({
     model: modelName,
     systemInstruction,
@@ -151,7 +169,7 @@ async function completeGemini(
   } catch (err: any) {
     if (err?.message?.includes('not found') || err?.message?.includes('no longer available')) {
       model = genAI.getGenerativeModel({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.6-flash',
         systemInstruction,
         tools: tools?.length ? (openaiToolsToGemini(tools) as never) : undefined,
       })
@@ -161,6 +179,7 @@ async function completeGemini(
     }
   }
   const functionCalls = result.response.functionCalls?.() || []
+  const rawParts = result.response.candidates?.[0]?.content?.parts || []
 
   if (functionCalls.length) {
     return {
@@ -172,13 +191,14 @@ async function completeGemini(
         content: null,
         refusal: null,
         tool_calls: functionCalls.map((fc, i) => ({
-          id: `gemini_${Date.now()}_${i}`,
+          id: (fc as any).id || `gemini_${Date.now()}_${i}`,
           type: 'function' as const,
           function: {
             name: fc.name,
             arguments: JSON.stringify(fc.args || {}),
           },
-        })),
+          _rawPart: rawParts[i] || { functionCall: fc },
+        })) as any,
       },
     }
   }
@@ -203,24 +223,11 @@ export async function completeChat(
   options?: GenerateOptions
 ): Promise<OpenAI.Chat.ChatCompletion.Choice> {
   const preferred = options?.provider
-  const tryOpenAI = preferred === 'openai' || (!preferred && openaiConfigured(options?.apiKey)) || (preferred !== 'gemini' && openaiConfigured(options?.apiKey))
-  const tryGemini = preferred === 'gemini' || (!preferred && geminiConfigured(options?.apiKey)) || geminiConfigured(options?.apiKey)
+  const isGeminiAvailable = geminiConfigured(options?.apiKey)
+  const isOpenAIAvailable = openaiConfigured(options?.apiKey)
 
-  if (preferred === 'openai' && openaiConfigured(options?.apiKey)) {
-    try {
-      return await completeOpenAI(messages, tools, options)
-    } catch (err) {
-      console.warn('OpenAI complete failed:', err)
-    }
-  } else if (preferred !== 'gemini' && openaiConfigured(options?.apiKey) && tryOpenAI) {
-    try {
-      return await completeOpenAI(messages, tools, options)
-    } catch (err) {
-      console.warn('OpenAI complete failed:', err)
-    }
-  }
-
-  if (tryGemini && geminiConfigured(options?.apiKey) && preferred !== 'simulator') {
+  // Explicit provider choice
+  if (preferred === 'gemini' && isGeminiAvailable) {
     try {
       return await completeGemini(messages, tools, options)
     } catch (err) {
@@ -228,17 +235,36 @@ export async function completeChat(
     }
   }
 
-  if (preferred !== 'openai' && openaiConfigured(options?.apiKey)) {
+  if (preferred === 'openai' && isOpenAIAvailable) {
     try {
       return await completeOpenAI(messages, tools, options)
     } catch (err) {
-      console.warn('OpenAI fallback failed:', err)
+      console.warn('OpenAI complete failed:', err)
     }
   }
 
+  // Default: Prioritize Gemini when configured (per user request: "instead of using chatgpt api, i have used gemini api key")
+  if (isGeminiAvailable && preferred !== 'simulator' && preferred !== 'openai') {
+    try {
+      return await completeGemini(messages, tools, options)
+    } catch (err) {
+      console.warn('Gemini primary complete failed, trying fallback:', err)
+    }
+  }
+
+  // Fallback to OpenAI if configured
+  if (isOpenAIAvailable && preferred !== 'simulator') {
+    try {
+      return await completeOpenAI(messages, tools, options)
+    } catch (err) {
+      console.warn('OpenAI complete failed:', err)
+    }
+  }
+
+  // Fallback to deterministic simulator
   return generateSimulatedResponse(messages, tools)
 }
 
 export function hasLlmProvider(options?: GenerateOptions) {
-  return openaiConfigured(options?.apiKey) || geminiConfigured(options?.apiKey)
+  return geminiConfigured(options?.apiKey) || openaiConfigured(options?.apiKey)
 }
